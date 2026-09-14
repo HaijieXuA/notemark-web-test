@@ -67,10 +67,7 @@ function atEnd(){const s=getSelection();if(!s?.isCollapsed||!s.rangeCount)return
 async function convert(mode,newline){
  busy=true;transactionRevision=revision;pendingNewline=newline;
  try{
-  const expectedSource=text();
   key('Home',36);key('End',35,{shiftKey:true});
-  const selectedText=getSelection()?.toString().replace(/\r?\n$|\r$/,'');
-  if(selectedText!==expectedSource&&selectedText!==expectedSource+'\u00a0')throw Object.assign(Error('选区跨行或不完整，已取消转换。'),{wrote:false});
   const result=await request(mode);
   if(transactionRevision!==revision)throw Error('检测到新输入，请检查当前段落；已停止移动光标');
   focusParagraph(result.text);key('End',35);collapseSelection();
