@@ -24,6 +24,44 @@ function parse(source){
  const r=inline(body),tag=heading?'h'+heading:'p';
  return {source,text:r.text,html:'<'+tag+'>'+r.html+'</'+tag+'>',heading,changed};
 }
+// Serialize only supported inline formatting; never silently discard other content.
+function markdownFromRuns(runs,heading=0){
+ const escapeText=s=>s.replace(/[\\*~=]/g,'\\$&');
+ let body='';const merged=[];
+ for(const r of runs){const marks=(r.bold?'**':'')+(r.italic?'*':'');const key=JSON.stringify([marks,!!r.strike,!!r.highlight]);
+  if(merged.length&&merged[merged.length-1].key===key)merged[merged.length-1].text+=r.text;
+  else merged.push({...r,key,marks});}
+ for(const r of merged){const m=/^(\s*)([\s\S]*?)(\s*)$/.exec(r.text),inner=escapeText(m[2]);
+  const open=(r.highlight?'==':'')+(r.strike?'~~':'')+r.marks;
+  const close=r.marks+(r.strike?'~~':'')+(r.highlight?'==':'');
+  body+=m[1]+(inner?open+inner+close:'')+m[3];}
+ const source=(heading?'#'.repeat(heading)+' ':'')+body;
+ const expected=runs.map(r=>r.text).join('');
+ if(parse(source).text!==expected)throw Error('当前格式组合无法可靠生成 Markdown，正文未修改。');
+ return source;
+}
+function fromHtml(html){
+ const doc=new DOMParser().parseFromString(html,'text/html'),runs=[];let heading=0;
+ if(doc.querySelector('table,img,a,code,pre,ul,ol,br,script,style'))throw Error('本段含暂不支持还原的内容，正文未修改。');
+ const blocks=doc.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+ if(blocks.length>1)throw Error('请只选择一个段落。');
+ function walk(n,style={}){
+  if(n.nodeType===3){runs.push({...style,text:n.textContent});return;}
+  if(n.nodeType!==1)return;
+  const tag=n.tagName.toLowerCase(),css=n.style,next={...style};
+  if(/^h[1-6]$/.test(tag))heading=Number(tag[1]);
+  if(['b','strong'].includes(tag))next.bold=true;
+  if(['i','em'].includes(tag))next.italic=true;
+  if(['s','del','strike'].includes(tag))next.strike=true;
+  if(tag==='mark')next.highlight=true;
+  if(css.fontWeight)next.bold=css.fontWeight==='bold'||Number(css.fontWeight)>=600;
+  if(css.fontStyle)next.italic=css.fontStyle==='italic';
+  if(css.textDecoration.includes('line-through'))next.strike=true;
+  if(css.backgroundColor&&css.backgroundColor!=='transparent'&&css.backgroundColor!=='rgba(0, 0, 0, 0)')next.highlight=true;
+  for(const child of n.childNodes)walk(child,next);
+ }
+ walk(doc.body);return markdownFromRuns(runs,heading);
+}
 // Compare effective character formatting, not OneNote's transient span layout.
 function fingerprint(html){
  if(typeof DOMParser==='undefined')return html;
@@ -58,5 +96,5 @@ class SourceStore{
  get(context,text,html){const r=this.records[key(context)];if(!r)return null;if(r.text!==text||fingerprint(r.html)!==fingerprint(html))throw Error('此段落渲染后已被编辑，不能用旧原文覆盖。');return r.source;}
  clear(){this.storage.removeItem(this.name);this.storage.removeItem('notemark.pending.v1');this.records={};}
 }
-const api={parse,esc,stripEnd,SourceStore,fingerprint};if(typeof module!=='undefined')module.exports=api;else root.NoteMarkCore=api;
+const api={fromHtml,markdownFromRuns,parse,esc,stripEnd,SourceStore,fingerprint};if(typeof module!=='undefined')module.exports=api;else root.NoteMarkCore=api;
 })(globalThis);

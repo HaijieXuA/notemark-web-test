@@ -17,3 +17,9 @@ Official host initialization, selected text reads and HTML replacement have been
 Keyboard integration, complete source round-trips, heading timing, real IME input and rapid typing are still being validated. Do not treat this as a production release. If typing during an asynchronous conversion, current selection can change; use only test notes while evaluating the experimental Enter mode. If the current paragraph cannot be uniquely located, the bridge stops rather than guessing. Wrapped lines and complex nested Markdown are not yet accepted.
 
 No analytics or remote note storage. Office.js is loaded from Microsoft's CDN; GitHub Pages serves the application code.
+
+
+## Recovery update
+The restore button uses an exact saved source when valid, or generates Markdown from exported paragraph formatting when no record exists. A separate Generate button explicitly uses current formatting when a saved record is stale. Unsupported content is refused. Formatting omitted by OneNote HTML export, including some highlight, cannot be reconstructed. Font family, size and color are not represented in Markdown.
+
+The pane now displays extension connection state. Enter is disabled while disconnected or when keyboard support is unchecked. Clearing source records requires confirmation. This update has local unit and mock DOM coverage; live acceptance is pending.
