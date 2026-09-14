@@ -7,7 +7,9 @@ function updateBridge(){const connected=Date.now()-lastBridge<4000;
  if($('autoenter').disabled)$('autoenter').checked=false;
 }
 setInterval(updateBridge,1000);
-$('bridge').onchange=updateBridge;
+function sendSettings(){parent.postMessage({channel:'notemark.v2',hostCommand:'settings',ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked},'https://onenote.officeapps.live.com');}
+$('bridge').onchange=()=>{updateBridge();sendSettings();};
+$('autoenter').onchange=sendSettings;
 const hostPending=new Map();
 function hostHighlight(text,ranges){const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{hostPending.delete(id);reject(Error('高亮步骤未响应，原文备份已保留'));},5000);hostPending.set(id,{resolve,reject,timer});parent.postMessage({channel:'notemark.v2',hostCommand:'highlight',id,text,ranges},'https://onenote.officeapps.live.com');});}
 function highlights(html){const doc=new DOMParser().parseFromString(html,'text/html'),ranges=[];let position=0;function walk(n,active=false){if(n.nodeType===3){if(active&&n.textContent)ranges.push({start:position,length:[...n.textContent].length,text:n.textContent});position+=[...n.textContent].length;return;}if(n.nodeType!==1)return;for(const child of n.childNodes)walk(child,active||!!n.style.backgroundColor);}walk(doc.body);return ranges;}
