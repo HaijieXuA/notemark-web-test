@@ -16,7 +16,7 @@ function highlights(html){const doc=new DOMParser().parseFromString(html,'text/h
 try{store=new C.SourceStore(localStorage);}catch(e){$('status').textContent='浏览器存储不可用：'+e.message;}
 function report(v){$('log').textContent=(JSON.stringify(v,null,2)+'\n'+$('log').textContent).slice(0,12000);}
 function status(s){$('status').textContent=s;}
-async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,capture=false){return OneNote.run(async ctx=>{
+async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,capture=false,dom=null){return OneNote.run(async ctx=>{
  const app=ctx.application,book=app.getActiveNotebook(),page=app.getActivePage();
  let p=anchor?null:app.getActiveParagraph(),textLoaded=false,location;
  const outline=app.getActiveOutline();
@@ -30,7 +30,10 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
    if(!p||(!afterWrite&&ps.items[anchor.index]?.id!==p.id))throw Error('原段落已移动，已取消。');
    textLoaded=true;location=anchor;
   }else{
-   if(p.isNullObject)throw Error('请先单击需要转换的段落，再使用快捷键。');
+   if(p.isNullObject){
+    if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.texts.length!==ps.items.length||dom.index<0||dom.index>=ps.items.length||ps.items.some((x,i)=>x.type!=='RichText'||C.stripEnd(x.richText.text)!==C.stripEnd(dom.texts[i])))throw Error('页面段落顺序与 OneNote 不一致，已取消定位。');
+    p=ps.items[dom.index];
+   }
    const index=ps.items.findIndex(x=>x.id===p.id);if(index<0)throw Error('无法记录当前段落位置。');
    location={notebook:book.id,page:page.id,outline:outline.id,paragraph:p.id,index,count:ps.items.length};
   }
@@ -92,7 +95,7 @@ window.addEventListener('message',async e=>{
  if(e.data.mode==='ping'){lastBridge=Date.now();updateBridge();}
  if(e.data.mode!=='ping'&&!$('bridge').checked)return;
  const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','ping','anchor'].includes(mode))return;
- try{const result=mode==='ping'?{ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked}:mode==='anchor'?await snapshot(undefined,false,null,false,true):await run(mode,true,e.data.anchor);e.source.postMessage({channel:'notemark.v2',id,ok:true,result},e.origin);}
+ try{const result=mode==='ping'?{ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked}:mode==='anchor'?await snapshot(undefined,false,null,false,true,e.data.anchor):await run(mode,true,e.data.anchor);e.source.postMessage({channel:'notemark.v2',id,ok:true,result},e.origin);}
  catch(err){e.source.postMessage({channel:'notemark.v2',id,ok:false,error:err.message||String(err),wrote:err.wrote},e.origin);}
 });
 if(typeof Office==='undefined')status('Office.js 未加载。');

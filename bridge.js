@@ -74,7 +74,9 @@ async function convert(mode,newline){
   const candidates=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&r&&Math.abs(p.getBoundingClientRect().top-r.top)<1&&Math.abs(p.getBoundingClientRect().left-r.left)<1);
   displayAnchor=candidates.length===1?candidates[0]:null;
   displaySlot=displayAnchor?{parent:displayAnchor.parentElement,index:[...displayAnchor.parentElement.children].indexOf(displayAnchor),count:displayAnchor.parentElement.children.length}:null;
-  const pinned=await request('anchor').catch(e=>{e.wrote=false;throw e;});assertCurrent();
+  const siblings=displayAnchor?[...displayAnchor.parentElement.children]:[];
+  const dom=siblings.length&&siblings.every(p=>p.matches('p.Paragraph'))?{index:siblings.indexOf(displayAnchor),texts:siblings.map(p=>[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join(''))}:null;
+  const pinned=await request('anchor',dom).catch(e=>{e.wrote=false;throw e;});assertCurrent();
   key('Home',36);key('End',35,{shiftKey:true});
   const result=await request(mode,pinned.location);
   if(transactionRevision!==revision)throw Error('检测到新输入，请检查当前段落；已停止移动光标');
