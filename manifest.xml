@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="TaskPaneApp">
+  <Id>591c6e12-98e1-4c48-99ec-e90a4c974c81</Id>
+  <Version>0.1.1.0</Version>
+  <ProviderName>NoteMark Local Test</ProviderName>
+  <DefaultLocale>zh-CN</DefaultLocale>
+  <DisplayName DefaultValue="NoteMark API Test"/>
+  <Description DefaultValue="Local OneNote selection and HTML API experiment. Writes only on the named test page."/>
+  <Hosts><Host Name="Notebook"/></Hosts>
+  <DefaultSettings><SourceLocation DefaultValue="https://haijiexua.github.io/notemark-web-test/taskpane.html"/></DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

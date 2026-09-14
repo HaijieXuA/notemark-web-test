@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NoteMark API Test</title>
+<style>body{font:15px system-ui;padding:18px;color:#222}button{display:block;margin:12px 0;padding:10px;width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f3f3;padding:12px}textarea{width:100%;height:75px;box-sizing:border-box}small{color:#666}</style>
+<h2>NoteMark API Test</h2><p id="status">正在连接 Office.js…</p>
+<p>只在 <b>NoteMark Web Test</b> 页测试。先选中下面这行样例，再点转换。</p>
+<textarea readonly>API-01 普通 **粗体** *斜体* ~~删除线~~ ==高亮==</textarea>
+<button id="inspect" disabled>检查当前页与选区</button>
+<button id="convert" disabled>通过 API 转换选中文字</button>
+<small>日志仅留在本窗口。耗时是接口往返，不代表云端保存或最终显示时间。</small>
+<pre id="log"></pre>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<script src="taskpane.js"></script></html>
