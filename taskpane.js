@@ -44,6 +44,7 @@ async function run(mode,fromBridge=false){
   const selectedRequest=read();
   const [before,selected]=await Promise.all([snapshot(selectedRequest,mode!=='convert'),selectedRequest]);
   if(mode==='inspect'){report({context:before,selected});status('已读取当前段落。');return {};}
+  const readMs=performance.now()-start;
   const raw=C.stripEnd(selected);
   if(!raw||raw!==before.text)throw Error('请完整选中当前段落，避免覆盖部分文字。');
   let html,source,ranges=[],generated=false;const restoring=mode==='restore'||mode==='generate';
@@ -62,7 +63,7 @@ async function run(mode,fromBridge=false){
   const after=await snapshot(expected,!restoring);
   if(after.text!==expected)throw Error('接口已返回，但正文未通过核对。请检查正文；未自动重试。');
   if(!restoring)store.put(after,source,after.text,after.html);
-  const result={mode,generated,text:expected,writeMs,totalMs:performance.now()-start,paragraph:after.paragraph};report(result);status((generated?'已根据当前格式生成 Markdown（接口未提供的高亮无法恢复）。':'已完成。')+' 耗时 '+Math.round(result.totalMs)+' ms。');return result;
+  const result={mode,generated,text:expected,readMs,writeMs,verifyMs:performance.now()-tw-writeMs,totalMs:performance.now()-start,paragraph:after.paragraph};report(result);status((generated?'已根据当前格式生成 Markdown（接口未提供的高亮无法恢复）。':'已完成。')+' 耗时 '+Math.round(result.totalMs)+' ms。');return result;
  }catch(e){e.wrote=wrote;status(e.message||String(e));report({error:e.message||String(e),code:e.code});throw e;}
  finally{busy=false;controls.forEach(id=>$(id).disabled=!ready);}
 }

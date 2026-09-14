@@ -7,10 +7,24 @@ const origin='https://haijiexua.github.io',pending=new Map(),seen=new Set();
 const editor=()=>document.getElementById('WACViewPanel_EditingElement');
 const frame=()=>[...document.querySelectorAll('iframe')].find(f=>{try{const u=new URL(f.src);return u.origin===origin&&u.pathname==='/notemark-web-test/taskpane.html';}catch{return false;}});
 const tick=()=>new Promise(r=>setTimeout(r,0));
-function key(k,n,mods={}){const el=editor();if(!el)throw Error('编辑区未就绪');el.focus();el.dispatchEvent(new KeyboardEvent('keydown',{key:k,code:k,keyCode:n,which:n,bubbles:true,cancelable:true,...mods}));}
+function key(k,n,mods={}){
+ const el=editor();if(!el)throw Error('编辑区未就绪');el.focus();
+ const args={key:k,code:k,keyCode:n,which:n,bubbles:true,cancelable:true,ctrlKey:false,altKey:false,metaKey:false,shiftKey:false,...mods};
+ el.dispatchEvent(new KeyboardEvent('keydown',args));
+ // OneNote tracks modifier state across events: every synthetic key needs a release.
+ el.dispatchEvent(new KeyboardEvent('keyup',args));
+ if(mods.shiftKey)el.dispatchEvent(new KeyboardEvent('keyup',{...args,key:'Shift',code:'ShiftLeft',keyCode:16,which:16,shiftKey:false}));
+}
+function collapseSelection(){const s=getSelection();if(s?.rangeCount&&!s.isCollapsed)s.collapseToEnd();}
+function activeParagraph(){
+ const s=getSelection(),node=s?.focusNode,p=(node?.nodeType===1?node:node?.parentElement)?.closest('p.Paragraph');
+ if(p&&editor()?.contains(p))return p;
+ const ps=editor()?.querySelectorAll('p.Paragraph');return ps?.length===1?ps[0]:null;
+}
+
 function notice(s){let el=document.getElementById('notemark-status');if(!el){el=document.createElement('div');el.id='notemark-status';el.style.cssText='position:fixed;bottom:15px;right:20px;z-index:2147483647;background:#34213f;color:white;padding:10px 15px;border-radius:8px;max-width:360px;font:14px system-ui';document.body.append(el);}el.textContent=s;clearTimeout(el.timer);el.timer=setTimeout(()=>el.remove(),5000);}
 function request(mode){const f=frame();if(!f)return Promise.reject(Error('请打开 NoteMark 窗格'));const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);availableUntil=0;reject(Error('加载项响应超时，请检查正文后重试'));},10000);pending.set(id,{resolve,reject,timer,source:f.contentWindow});f.contentWindow.postMessage({channel:'notemark.v2',id,mode},origin);});}
-function text(){return [...editor().querySelectorAll('.TextRun')].map(n=>n.textContent).join('');}
+function text(){const p=activeParagraph();if(!p)throw Error('请把光标放在单个段落内');return [...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('');}
 function focusParagraph(expected){
  const matches=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('')===expected);
  if(matches.length!==1)throw Error('无法唯一定位转换后的段落，已停止移动光标');
@@ -49,17 +63,19 @@ async function message(e){
  clearTimeout(p.timer);pending.delete(e.data.id);
  e.data.ok?p.resolve(e.data.result):p.reject(Object.assign(Error(e.data.error),{wrote:e.data.wrote}));
 }
-function atEnd(){const s=getSelection();if(!s?.isCollapsed||!s.rangeCount)return false;const p=editor().querySelector('p');if(!p)return false;try{const r=s.getRangeAt(0).cloneRange();r.setStart(p,0);return r.toString().length>=text().length;}catch{return false;}}
+function atEnd(){const s=getSelection();if(!s?.isCollapsed||!s.rangeCount)return false;const p=activeParagraph();if(!p)return false;try{const r=s.getRangeAt(0).cloneRange();r.setStart(p,0);return r.toString().length>=text().length;}catch{return false;}}
 async function convert(mode,newline){
  busy=true;transactionRevision=revision;pendingNewline=newline;
  try{
+  const expectedSource=text();
   key('Home',36);key('End',35,{shiftKey:true});
+  if(getSelection()?.toString().replace(/\r?\n$|\r$/,'')!==expectedSource)throw Object.assign(Error('选区跨行或不完整，已取消转换。'),{wrote:false});
   const result=await request(mode);
   if(transactionRevision!==revision)throw Error('检测到新输入，请检查当前段落；已停止移动光标');
-  focusParagraph(result.text);key('End',35);
+  focusParagraph(result.text);key('End',35);collapseSelection();
   if(pendingNewline){pendingNewline=false;key('Enter',13);document.getElementById('ClearFormatting')?.click();}
   notice(result.unchanged?'没有可转换标记':'NoteMark 已转换');
- }catch(e){notice(e.message);if(e.wrote===false&&transactionRevision===revision&&editor()){key('End',35);if(newline)key('Enter',13);}}
+ }catch(e){notice(e.message);if(transactionRevision===revision)collapseSelection();if(e.wrote===false&&transactionRevision===revision&&editor()){key('End',35);if(newline)key('Enter',13);}}
  finally{busy=false;pendingNewline=false;}
 }
 function start(){composing=true;availableUntil=0;revision++;}
