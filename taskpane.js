@@ -16,11 +16,25 @@ function highlights(html){const doc=new DOMParser().parseFromString(html,'text/h
 try{store=new C.SourceStore(localStorage);}catch(e){$('status').textContent='浏览器存储不可用：'+e.message;}
 function report(v){$('log').textContent=(JSON.stringify(v,null,2)+'\n'+$('log').textContent).slice(0,12000);}
 function status(s){$('status').textContent=s;}
-async function snapshot(hint,includeHtml=true){return OneNote.run(async ctx=>{
+async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,capture=false){return OneNote.run(async ctx=>{
  const app=ctx.application,book=app.getActiveNotebook(),page=app.getActivePage();
- let p=app.getActiveParagraph(),textLoaded=false;
- book.load('id');page.load('id,title');p.load('id,type');await ctx.sync();
+ let p=anchor?null:app.getActiveParagraph(),textLoaded=false,location;
+ const outline=app.getActiveOutline();
+ book.load('id');page.load('id,title');if(p)p.load('id,type');await ctx.sync();
  if(!$('allpages').checked&&page.title.trim()!=='NoteMark Web Test')throw Error('默认仅在 NoteMark Web Test 页操作。');
+ if(anchor||capture){
+  outline.load('id');const ps=outline.paragraphs;ps.load('items/id,items/type,items/richText/text');await ctx.sync();
+  if(anchor){
+   if(book.id!==anchor.notebook||page.id!==anchor.page||outline.id!==anchor.outline||ps.items.length!==anchor.count)throw Error('段落位置已变化，已取消。');
+   p=afterWrite?ps.items[anchor.index]:ps.items.find(x=>x.id===anchor.paragraph);
+   if(!p||(!afterWrite&&ps.items[anchor.index]?.id!==p.id))throw Error('原段落已移动，已取消。');
+   textLoaded=true;location=anchor;
+  }else{
+   if(p.isNullObject)throw Error('请先单击需要转换的段落，再使用快捷键。');
+   const index=ps.items.findIndex(x=>x.id===p.id);if(index<0)throw Error('无法记录当前段落位置。');
+   location={notebook:book.id,page:page.id,outline:outline.id,paragraph:p.id,index,count:ps.items.length};
+  }
+ }
  if(p.isNullObject){
   const selected=C.stripEnd(await (hint??read()));
   const ps=app.getActiveOutline().paragraphs;
@@ -33,16 +47,16 @@ async function snapshot(hint,includeHtml=true){return OneNote.run(async ctx=>{
  let html;
  if(includeHtml){p.richText.load('text');html=p.richText.getHtml();await ctx.sync();}
  else if(!textLoaded){p.richText.load('text');await ctx.sync();}
- return {notebook:book.id,page:page.id,paragraph:p.id,text:C.stripEnd(p.richText.text),html:html?.value};
+ return {location,notebook:book.id,page:page.id,paragraph:p.id,text:C.stripEnd(p.richText.text),html:html?.value};
 });}
 const read=()=>new Promise((resolve,reject)=>Office.context.document.getSelectedDataAsync(Office.CoercionType.Text,r=>r.status===Office.AsyncResultStatus.Succeeded?resolve(r.value):reject(r.error)));
 const write=html=>new Promise((resolve,reject)=>Office.context.document.setSelectedDataAsync(html,{coercionType:Office.CoercionType.Html},r=>r.status===Office.AsyncResultStatus.Succeeded?resolve():reject(r.error)));
-async function run(mode,fromBridge=false){
+async function run(mode,fromBridge=false,anchor=null){
  if(!ready||busy)throw Error('正在处理，请稍后重试。');busy=true;controls.forEach(id=>$(id).disabled=true);
  const start=performance.now();let wrote=false;
  try{
   const selectedRequest=read();
-  const [before,selected]=await Promise.all([snapshot(selectedRequest,mode!=='convert'),selectedRequest]);
+  const [before,selected]=await Promise.all([snapshot(selectedRequest,mode!=='convert',anchor),selectedRequest]);
   if(mode==='inspect'){report({context:before,selected});status('已读取当前段落。');return {};}
   const readMs=performance.now()-start;
   const raw=C.stripEnd(selected);
@@ -60,7 +74,7 @@ async function run(mode,fromBridge=false){
   const tw=performance.now();wrote=true;await write(html);const writeMs=performance.now()-tw;
   const expected=restoring?source:C.parse(source).text;
   if(ranges.length)await hostHighlight(expected,ranges);
-  const after=await snapshot(expected,!restoring);
+  const after=await snapshot(expected,!restoring,anchor,true);
   if(after.text!==expected)throw Error('接口已返回，但正文未通过核对。请检查正文；未自动重试。');
   if(!restoring)store.put(after,source,after.text,after.html);
   const result={mode,generated,text:expected,readMs,writeMs,verifyMs:performance.now()-tw-writeMs,totalMs:performance.now()-start,paragraph:after.paragraph};report(result);status((generated?'已根据当前格式生成 Markdown（接口未提供的高亮无法恢复）。':'已完成。')+' 耗时 '+Math.round(result.totalMs)+' ms。');return result;
@@ -77,8 +91,8 @@ window.addEventListener('message',async e=>{
  if(e.data?.channel!=='notemark.v2')return;
  if(e.data.mode==='ping'){lastBridge=Date.now();updateBridge();}
  if(e.data.mode!=='ping'&&!$('bridge').checked)return;
- const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','ping'].includes(mode))return;
- try{const result=mode==='ping'?{ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked}:await run(mode,true);e.source.postMessage({channel:'notemark.v2',id,ok:true,result},e.origin);}
+ const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','ping','anchor'].includes(mode))return;
+ try{const result=mode==='ping'?{ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked}:mode==='anchor'?await snapshot(undefined,false,null,false,true):await run(mode,true,e.data.anchor);e.source.postMessage({channel:'notemark.v2',id,ok:true,result},e.origin);}
  catch(err){e.source.postMessage({channel:'notemark.v2',id,ok:false,error:err.message||String(err),wrote:err.wrote},e.origin);}
 });
 if(typeof Office==='undefined')status('Office.js 未加载。');

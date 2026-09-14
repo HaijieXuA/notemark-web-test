@@ -2,7 +2,7 @@
 (()=>{
 'use strict';
 window.__NoteMarkBridge?.stop();
-let busy=false,composing=false,lastComposition=0,availableUntil=0,autoEnter=false,revision=0,transactionRevision=0,pendingNewline=false;
+let busy=false,composing=false,lastComposition=0,availableUntil=0,autoEnter=false,revision=0,transactionRevision=0,pendingNewline=false,displayAnchor=null,displaySlot=null;
 const origin='https://haijiexua.github.io',pending=new Map(),seen=new Set();
 const editor=()=>document.getElementById('WACViewPanel_EditingElement');
 const frame=()=>[...document.querySelectorAll('iframe')].find(f=>{try{const u=new URL(f.src);return u.origin===origin&&u.pathname==='/notemark-web-test/taskpane.html';}catch{return false;}});
@@ -23,12 +23,14 @@ function activeParagraph(){
 }
 
 function notice(s){let el=document.getElementById('notemark-status');if(!el){el=document.createElement('div');el.id='notemark-status';el.style.cssText='position:fixed;bottom:15px;right:20px;z-index:2147483647;background:#34213f;color:white;padding:10px 15px;border-radius:8px;max-width:360px;font:14px system-ui';document.body.append(el);}el.textContent=s;clearTimeout(el.timer);el.timer=setTimeout(()=>el.remove(),5000);}
-function request(mode){const f=frame();if(!f)return Promise.reject(Error('请打开 NoteMark 窗格'));const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);availableUntil=0;reject(Error('加载项响应超时，请检查正文后重试'));},10000);pending.set(id,{resolve,reject,timer,source:f.contentWindow});f.contentWindow.postMessage({channel:'notemark.v2',id,mode},origin);});}
+function request(mode,anchor){const f=frame();if(!f)return Promise.reject(Error('请打开 NoteMark 窗格'));const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);availableUntil=0;reject(Error('加载项响应超时，请检查正文后重试'));},10000);pending.set(id,{resolve,reject,timer,source:f.contentWindow});f.contentWindow.postMessage({channel:'notemark.v2',id,mode,anchor},origin);});}
 function text(){const p=activeParagraph();if(!p)throw Error('请把光标放在单个段落内');return [...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('');}
 function focusParagraph(expected){
  const matches=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('')===expected);
- if(matches.length!==1)throw Error('无法唯一定位转换后的段落，已停止移动光标');
- const p=matches[0],r=p.getBoundingClientRect();
+ const slot=displaySlot?.parent?.isConnected&&displaySlot.parent.children.length===displaySlot.count?displaySlot.parent.children[displaySlot.index]:null;
+ const anchored=displayAnchor?.isConnected&&matches.includes(displayAnchor)?displayAnchor:matches.includes(slot)?slot:null;
+ if(!anchored&&matches.length!==1)throw Error('无法唯一定位转换后的段落，已停止移动光标');
+ const p=anchored||matches[0],r=p.getBoundingClientRect();
  if(r.width===0||r.height===0)throw Error('当前段落不可见');
  for(const type of ['mousedown','mouseup','click'])p.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window,clientX:r.right-2,clientY:r.top+r.height/2,button:0,buttons:type==='mousedown'?1:0}));
  if(!editor()||text()!==expected)throw Error('正文焦点核对失败');
@@ -67,8 +69,14 @@ function atEnd(){const s=getSelection();if(!s?.isCollapsed||!s.rangeCount)return
 async function convert(mode,newline){
  busy=true;transactionRevision=revision;pendingNewline=newline;
  try{
+  collapseSelection();
+  const current=activeParagraph(),r=current?.getBoundingClientRect?.();
+  const candidates=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&r&&Math.abs(p.getBoundingClientRect().top-r.top)<1&&Math.abs(p.getBoundingClientRect().left-r.left)<1);
+  displayAnchor=candidates.length===1?candidates[0]:null;
+  displaySlot=displayAnchor?{parent:displayAnchor.parentElement,index:[...displayAnchor.parentElement.children].indexOf(displayAnchor),count:displayAnchor.parentElement.children.length}:null;
+  const pinned=await request('anchor').catch(e=>{e.wrote=false;throw e;});assertCurrent();
   key('Home',36);key('End',35,{shiftKey:true});
-  const result=await request(mode);
+  const result=await request(mode,pinned.location);
   if(transactionRevision!==revision)throw Error('检测到新输入，请检查当前段落；已停止移动光标');
   focusParagraph(result.text);key('End',35);collapseSelection();
   if(pendingNewline){pendingNewline=false;key('Enter',13);document.getElementById('ClearFormatting')?.click();}
