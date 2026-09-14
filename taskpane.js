@@ -31,7 +31,9 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
    textLoaded=true;location=anchor;
   }else{
    if(p.isNullObject){
-    if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.texts.length!==ps.items.length||dom.index<0||dom.index>=ps.items.length||ps.items.some((x,i)=>x.type!=='RichText'||C.stripEnd(x.richText.text)!==C.stripEnd(dom.texts[i])))throw Error('页面段落顺序与 OneNote 不一致，已取消定位。');
+    if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.texts.length!==ps.items.length||dom.index<0||dom.index>=ps.items.length)throw Error('段落结构核对失败（页面 '+(dom?.texts?.length??0)+'，OneNote '+ps.items.length+'），已取消。');
+    const mismatch=ps.items.findIndex((x,i)=>{if(x.type!=='RichText')return true;const a=C.stripEnd(x.richText.text),b=C.stripEnd(dom.texts[i]);return a!==b&&a+'\u00a0'!==b&&a!==b+'\u00a0';});
+    if(mismatch>=0)throw Error('第 '+(mismatch+1)+' 段文字核对不一致，已取消定位。');
     p=ps.items[dom.index];
    }
    const index=ps.items.findIndex(x=>x.id===p.id);if(index<0)throw Error('无法记录当前段落位置。');
