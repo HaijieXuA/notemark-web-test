@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="TaskPaneApp">
   <Id>e4b1e618-dbe4-4d62-8745-78f12f2c7342</Id>
-  <Version>0.2.0.0</Version>
+  <Version>0.2.1.0</Version>
   <ProviderName>NoteMark</ProviderName>
   <DefaultLocale>zh-CN</DefaultLocale>
   <DisplayName DefaultValue="NoteMark Web 0.2"/>
   <Description DefaultValue="Markdown formatting for OneNote Web."/>
   <Hosts><Host Name="Notebook"/></Hosts>
-  <DefaultSettings><SourceLocation DefaultValue="https://haijiexua.github.io/notemark-web-test/taskpane.html?v=0.2.0"/></DefaultSettings>
+  <DefaultSettings><SourceLocation DefaultValue="https://haijiexua.github.io/notemark-web-test/taskpane.html?v=0.2.1"/></DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>
