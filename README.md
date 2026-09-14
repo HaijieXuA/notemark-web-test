@@ -1,9 +1,9 @@
-# NoteMark API Test
+# NoteMark Web 0.2 — experimental
 
-Experimental OneNote on the web task-pane add-in. Not a finished Markdown editor.
+OneNote Web task pane using Office.js. Supports a selected paragraph with headings, bold, italic, strikethrough and highlight. Source records are scoped to notebook, page and paragraph in local browser storage. Restoration refuses changed text or formatting. A pending source backup is persisted before a write.
 
-Uses Microsoft Office.js to read selected text and write HTML. Only operates on a page titled `NoteMark Web Test` and sample selections beginning with `API-` followed by digits. Supports simple bold, italic, strikethrough and highlight samples. No keyboard hooks or automatic conversion.
+Upload manifest.xml from OneNote's Add-ins menu. The default writing scope is the page named `NoteMark Web Test`. Select a complete paragraph and use the conversion button. Source history is local; closing an incognito session or clearing browser data can remove it.
 
-Host files with GitHub Pages from the main branch root. Upload `manifest.xml` through OneNote: Insert → Office Add-ins → Manage My Add-ins → Upload My Add-in.
+The keyboard/Enter bridge remains experimental and requires separate installation. Keep it disabled until host write, caret and undo behavior have been verified. API initialization and text reads have been verified; full write and persistence acceptance is still in progress. This is not a production release.
 
-The add-in code does not send note text to GitHub or an application backend. GitHub serves static assets and Microsoft provides Office.js and OneNote. Logs stay in the task pane memory. Office API conversion, undo and persistence validation is pending.
+No analytics or remote note storage. Office.js is loaded from Microsoft's official CDN.

@@ -1,13 +1,11 @@
-<!doctype html>
-<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NoteMark API Test</title>
-<style>body{font:15px system-ui;padding:18px;color:#222}button{display:block;margin:12px 0;padding:10px;width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f3f3;padding:12px}textarea{width:100%;height:75px;box-sizing:border-box}small{color:#666}</style>
-<h2>NoteMark API Test</h2><p id="status">正在连接 Office.js…</p>
-<p>只在 <b>NoteMark Web Test</b> 页测试。先选中下面这行样例，再点转换。</p>
-<textarea readonly>API-01 普通 **粗体** *斜体* ~~删除线~~ ==高亮==</textarea>
-<button id="inspect" disabled>检查当前页与选区</button>
-<button id="convert" disabled>通过 API 转换选中文字</button>
-<small>日志仅留在本窗口。耗时是接口往返，不代表云端保存或最终显示时间。</small>
-<pre id="log"></pre>
-<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-<script src="taskpane.js"></script></html>
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NoteMark Web 0.2</title>
+<style>body{font:14px system-ui;margin:18px;color:#292333}h1{font-size:22px}button{padding:10px;margin:5px 0;width:100%;border:1px solid #b3a4c4;border-radius:7px;background:#f7f3fc}label{display:block;margin:12px 0}pre{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f0f5;padding:10px}small{color:#675e70}textarea{width:100%;box-sizing:border-box;height:64px}</style>
+<h1>NoteMark Web 0.2</h1><p id="status">正在连接 OneNote…</p>
+<p>选中整行文字后转换。快捷键与回车需要安装配套浏览器扩展，并保持本窗格打开。</p>
+<button id="convert" disabled>转换选中行</button><button id="restore" disabled>当前行切回 Markdown</button><button id="inspect" disabled>检查当前行</button>
+<label><input type="checkbox" id="bridge">启用扩展快捷键与回车转换（实验）</label>
+<label><input type="checkbox" id="allpages">允许在其他页面使用（默认仅测试页）</label>
+<small>原文保存在当前浏览器本地，最多保留 500 段。清除浏览器数据或关闭无痕会话会丢失原文。笔记同步不包含这份原文记录。</small>
+<button id="clear">清空本地原文记录</button>
+<details><summary>测试样例与诊断</summary><textarea readonly># 标题 **粗体** *斜体* ~~删除线~~ ==高亮==</textarea><pre id="log"></pre></details>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><script src="core.js"></script><script src="taskpane.js"></script></html>
