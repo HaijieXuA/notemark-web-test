@@ -7,22 +7,24 @@ function highlights(html){const doc=new DOMParser().parseFromString(html,'text/h
 try{store=new C.SourceStore(localStorage);}catch(e){$('status').textContent='浏览器存储不可用：'+e.message;}
 function report(v){$('log').textContent=(JSON.stringify(v,null,2)+'\n'+$('log').textContent).slice(0,12000);}
 function status(s){$('status').textContent=s;}
-async function snapshot(hint){return OneNote.run(async ctx=>{
+async function snapshot(hint,includeHtml=true){return OneNote.run(async ctx=>{
  const app=ctx.application,book=app.getActiveNotebook(),page=app.getActivePage();
- let p=app.getActiveParagraph();
+ let p=app.getActiveParagraph(),textLoaded=false;
  book.load('id');page.load('id,title');p.load('id,type');await ctx.sync();
  if(!$('allpages').checked&&page.title.trim()!=='NoteMark Web Test')throw Error('默认仅在 NoteMark Web Test 页操作。');
  if(p.isNullObject){
-  const selected=hint??C.stripEnd(await read());
+  const selected=C.stripEnd(await (hint??read()));
   const ps=app.getActiveOutline().paragraphs;
   ps.load('items/id,items/type,items/richText/text');await ctx.sync();
   const matches=ps.items.filter(x=>x.type==='RichText'&&C.stripEnd(x.richText.text)===selected);
   if(matches.length!==1)throw Error('不能唯一定位当前段落，请将光标放在一行文字中重试。');
-  p=matches[0];
+  p=matches[0];textLoaded=true;
  }
  if(p.type!=='RichText')throw Error('当前段落不是文字。');
- p.richText.load('text');const html=p.richText.getHtml();await ctx.sync();
- return {notebook:book.id,page:page.id,paragraph:p.id,text:C.stripEnd(p.richText.text),html:html.value};
+ let html;
+ if(includeHtml){p.richText.load('text');html=p.richText.getHtml();await ctx.sync();}
+ else if(!textLoaded){p.richText.load('text');await ctx.sync();}
+ return {notebook:book.id,page:page.id,paragraph:p.id,text:C.stripEnd(p.richText.text),html:html?.value};
 });}
 const read=()=>new Promise((resolve,reject)=>Office.context.document.getSelectedDataAsync(Office.CoercionType.Text,r=>r.status===Office.AsyncResultStatus.Succeeded?resolve(r.value):reject(r.error)));
 const write=html=>new Promise((resolve,reject)=>Office.context.document.setSelectedDataAsync(html,{coercionType:Office.CoercionType.Html},r=>r.status===Office.AsyncResultStatus.Succeeded?resolve():reject(r.error)));
@@ -30,7 +32,8 @@ async function run(mode,fromBridge=false){
  if(!ready||busy)throw Error('正在处理，请稍后重试。');busy=true;controls.forEach(id=>$(id).disabled=true);
  const start=performance.now();let wrote=false;
  try{
-  const [before,selected]=await Promise.all([snapshot(),read()]);
+  const selectedRequest=read();
+  const [before,selected]=await Promise.all([snapshot(selectedRequest,mode!=='convert'),selectedRequest]);
   if(mode==='inspect'){report({context:before,selected});status('已读取当前段落。');return {};}
   const raw=C.stripEnd(selected);
   if(!raw||raw!==before.text)throw Error('请完整选中当前段落，避免覆盖部分文字。');
@@ -43,7 +46,7 @@ async function run(mode,fromBridge=false){
   const tw=performance.now();wrote=true;await write(html);const writeMs=performance.now()-tw;
   const expected=mode==='restore'?source:C.parse(source).text;
   if(ranges.length)await hostHighlight(expected,ranges);
-  const after=await snapshot(expected);
+  const after=await snapshot(expected,mode!=='restore');
   if(after.text!==expected)throw Error('接口已返回，但正文未通过核对。请检查正文；未自动重试。');
   if(mode!=='restore')store.put(after,source,after.text,after.html);
   const result={mode,text:expected,writeMs,totalMs:performance.now()-start,paragraph:after.paragraph};report(result);status('已完成，耗时 '+Math.round(result.totalMs)+' ms。');return result;
@@ -51,7 +54,8 @@ async function run(mode,fromBridge=false){
  finally{busy=false;controls.forEach(id=>$(id).disabled=!ready);}
 }
 for(const id of controls)$(id).onclick=()=>run(id).catch(()=>{});
-$('clear').onclick=()=>{store.clear();status('本地原文记录已清空。');};
+$('backup').onclick=()=>{try{const r=JSON.parse(localStorage.getItem('notemark.pending.v1')||'null');$('backuptext').hidden=false;$('backuptext').value=r?.source||'没有备份记录';}catch(e){status('无法读取原文备份：'+e.message);}};
+$('clear').onclick=()=>{if(!store)return;store.clear();$('backuptext').value='';status('本地原文记录已清空。');};
 // The paired extension runs only in the OneNote editor. Do not accept other origins or nested senders.
 window.addEventListener('message',async e=>{
  if(e.origin!=='https://onenote.officeapps.live.com'||e.source!==parent)return;

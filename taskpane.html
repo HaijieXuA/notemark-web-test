@@ -7,6 +7,7 @@
 <label><input type="checkbox" id="autoenter">实验：在行末按回车时转换</label>
 <label><input type="checkbox" id="allpages">允许在其他页面使用（默认仅测试页）</label>
 <small>原文保存在当前浏览器本地，最多保留 500 段。清除浏览器数据或关闭无痕会话会丢失原文。笔记同步不包含这份原文记录。</small>
+<button id="backup">显示最近一次原文备份</button><textarea id="backuptext" readonly hidden aria-label="最近一次原文备份"></textarea>
 <button id="clear">清空本地原文记录</button>
 <details><summary>测试样例与诊断</summary><textarea readonly># 标题 **粗体** *斜体* ~~删除线~~ ==高亮==</textarea><pre id="log"></pre></details>
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><script src="core.js?v=0.2.1"></script><script src="taskpane.js?v=0.2.1"></script></html>

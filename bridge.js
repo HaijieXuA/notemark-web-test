@@ -2,7 +2,7 @@
 (()=>{
 'use strict';
 window.__NoteMarkBridge?.stop();
-let busy=false,composing=false,lastComposition=0,availableUntil=0,autoEnter=false;
+let busy=false,composing=false,lastComposition=0,availableUntil=0,autoEnter=false,revision=0,transactionRevision=0;
 const origin='https://haijiexua.github.io',pending=new Map(),seen=new Set();
 const editor=()=>document.getElementById('WACViewPanel_EditingElement');
 const frame=()=>[...document.querySelectorAll('iframe')].find(f=>{try{const u=new URL(f.src);return u.origin===origin&&u.pathname==='/notemark-web-test/taskpane.html';}catch{return false;}});
@@ -40,7 +40,7 @@ async function message(e){
  if(e.data.hostCommand==='highlight'){
   const {id,text:expected,ranges}=e.data;
   if(seen.has(id))return;seen.add(id);if(seen.size>100)seen.delete(seen.values().next().value);
-  try{if(!busy)throw Error('没有活动转换');await highlight(expected,ranges);e.source.postMessage({channel:'notemark.host',id,ok:true},origin);}
+  try{if(!busy||transactionRevision!==revision)throw Error('输入已变化，停止自动选区操作');await highlight(expected,ranges);e.source.postMessage({channel:'notemark.host',id,ok:true},origin);}
   catch(err){e.source.postMessage({channel:'notemark.host',id,ok:false,error:err.message},origin);}return;
  }
  const p=pending.get(e.data.id);if(!p||e.source!==p.source)return;
@@ -49,22 +49,24 @@ async function message(e){
 }
 function atEnd(){const s=getSelection();if(!s?.isCollapsed||!s.rangeCount)return false;const p=editor().querySelector('p');if(!p)return false;try{const r=s.getRangeAt(0).cloneRange();r.setStart(p,0);return r.toString().length>=text().length;}catch{return false;}}
 async function convert(mode,newline){
- busy=true;
+ busy=true;transactionRevision=revision;
  try{
   key('Home',36);key('End',35,{shiftKey:true});
   const result=await request(mode);
+  if(transactionRevision!==revision)throw Error('检测到新输入，请检查当前段落；已停止移动光标');
   focusParagraph(result.text);key('End',35);
   if(newline){key('Enter',13);document.getElementById('ClearFormatting')?.click();}
   notice(result.unchanged?'没有可转换标记':'NoteMark 已转换');
- }catch(e){notice(e.message);if(e.wrote===false&&editor()){key('End',35);if(newline)key('Enter',13);}}
+ }catch(e){notice(e.message);if(e.wrote===false&&transactionRevision===revision&&editor()){key('End',35);if(newline)key('Enter',13);}}
  finally{busy=false;}
 }
-function start(){composing=true;availableUntil=0;}
+function start(){composing=true;availableUntil=0;revision++;}
 function end(){composing=false;lastComposition=performance.now();}
 function onKey(e){
  if(!e.isTrusted||!editor()?.contains(e.target))return;
- // Auto mode remains opt-in. During a request, keep ordinary typing available.
- if(busy)return;
+ // Do not leave the complete source selected when a real keystroke arrives.
+ // Invalidate every subsequent caret/highlight operation for this transaction.
+ if(busy){revision++;if(!getSelection()?.isCollapsed)key('End',35);return;}
  if(composing||e.isComposing||e.keyCode===229||performance.now()-lastComposition<100||e.repeat)return;
  const restore=e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.key===',';
  const manual=e.metaKey&&e.altKey&&!e.ctrlKey&&e.key==='Enter';
