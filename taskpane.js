@@ -25,7 +25,10 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
  if(anchor||capture){
   outline.load('id');const ps=outline.paragraphs;ps.load('items/id,items/type,items/richText/text');await ctx.sync();
   if(anchor){
-   if(book.id!==anchor.notebook||page.id!==anchor.page||outline.id!==anchor.outline||ps.items.length!==anchor.count)throw Error('段落位置已变化，已取消。');
+   if(book.id!==anchor.notebook||page.id!==anchor.page||outline.id!==anchor.outline)throw Error('当前笔记块已变化，已停止定位。');
+   const extra=afterWrite&&ps.items.length===anchor.count+1&&ps.items[anchor.index+1]?.type==='RichText'&&C.stripEnd(ps.items[anchor.index+1].richText.text).trim()==='';
+   if(ps.items.length!==anchor.count&&!extra)throw Error('写入后段落数量变化（'+anchor.count+'→'+ps.items.length+'），已停止定位。');
+   if(extra&&(!anchor.ids||ps.items.filter((x,i)=>i!==anchor.index+1).some((x,i)=>i!==anchor.index&&x.id!==anchor.ids[i])))throw Error('相邻段落已变化，已停止定位。');
    p=afterWrite?ps.items[anchor.index]:ps.items.find(x=>x.id===anchor.paragraph);
    if(!p||(!afterWrite&&ps.items[anchor.index]?.id!==p.id))throw Error('原段落已移动，已取消。');
    textLoaded=true;location=anchor;
@@ -37,7 +40,7 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
     p=ps.items[dom.index];
    }
    const index=ps.items.findIndex(x=>x.id===p.id);if(index<0)throw Error('无法记录当前段落位置。');
-   location={notebook:book.id,page:page.id,outline:outline.id,paragraph:p.id,index,count:ps.items.length};
+   location={notebook:book.id,page:page.id,outline:outline.id,paragraph:p.id,index,count:ps.items.length,ids:ps.items.map(x=>x.id)};
   }
  }
  if(p.isNullObject){

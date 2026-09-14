@@ -27,7 +27,8 @@ function request(mode,anchor){const f=frame();if(!f)return Promise.reject(Error(
 function text(){const p=activeParagraph();if(!p)throw Error('请把光标放在单个段落内');return [...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('');}
 function focusParagraph(expected){
  const matches=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('')===expected);
- const slot=displaySlot?.parent?.isConnected&&displaySlot.parent.querySelectorAll('p.Paragraph').length===displaySlot.count?displaySlot.parent.querySelectorAll('p.Paragraph')[displaySlot.index]:null;
+ const visibleSlots=displaySlot?.parent?.isConnected?[...displaySlot.parent.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)):[];
+ const slot=visibleSlots.length===displaySlot?.count?visibleSlots[displaySlot.index]:null;
  const anchored=displayAnchor?.isConnected&&matches.includes(displayAnchor)?displayAnchor:matches.includes(slot)?slot:null;
  if(!anchored&&matches.length!==1)throw Error('无法唯一定位转换后的段落，已停止移动光标');
  const p=anchored||matches[0],r=p.getBoundingClientRect();
@@ -74,7 +75,7 @@ async function convert(mode,newline){
   const candidates=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&r&&Math.abs(p.getBoundingClientRect().top-r.top)<1&&Math.abs(p.getBoundingClientRect().left-r.left)<1);
   displayAnchor=candidates.length===1?candidates[0]:null;
   const outline=displayAnchor?.closest('.OutlineContent');
-  const siblings=outline?[...outline.querySelectorAll('p.Paragraph')]:[];
+  const siblings=outline?[...outline.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)):[];
   displaySlot=outline?{parent:outline,index:siblings.indexOf(displayAnchor),count:siblings.length}:null;
   const dom=siblings.length&&siblings.indexOf(displayAnchor)>=0?{index:siblings.indexOf(displayAnchor),texts:siblings.map(p=>[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join(''))}:null;
   const pinned=await request('anchor',dom).catch(e=>{e.wrote=false;throw e;});assertCurrent();
