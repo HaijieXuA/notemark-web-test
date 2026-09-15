@@ -25,10 +25,25 @@ function activeParagraph(){
 function notice(s){let el=document.getElementById('notemark-status');if(!el){el=document.createElement('div');el.id='notemark-status';el.style.cssText='position:fixed;bottom:15px;right:20px;z-index:2147483647;background:#34213f;color:white;padding:10px 15px;border-radius:8px;max-width:360px;font:14px system-ui';document.body.append(el);}el.textContent=s;clearTimeout(el.timer);el.timer=setTimeout(()=>el.remove(),5000);}
 function request(mode,anchor){const f=frame();if(!f)return Promise.reject(Error('请打开 NoteMark 窗格'));const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);availableUntil=0;reject(Error('加载项响应超时，请检查正文后重试'));},10000);pending.set(id,{resolve,reject,timer,source:f.contentWindow});f.contentWindow.postMessage({channel:'notemark.v2',id,mode,anchor},origin);});}
 function text(){const p=activeParagraph();if(!p)throw Error('请把光标放在单个段落内');return [...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('');}
+function paragraphText(p){return [...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('');}
+function resolveDisplaySlot(expected){
+ if(!displaySlot?.parent?.isConnected)return null;
+ const rows=[...displaySlot.parent.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p));
+ const {index,count,texts}=displaySlot;
+ if(!texts||!rows[index]||paragraphText(rows[index])!==expected)return null;
+ const extra=rows.length===count+1&&paragraphText(rows[index+1]).trim()==='';
+ if(rows.length!==count&&!extra)return null;
+ const aligned=extra?rows.filter((p,i)=>i!==index+1):rows;
+ if(aligned.some((p,i)=>i!==index&&paragraphText(p)!==texts[i]))return null;
+ return rows[index];
+}
+function releaseHostSelection(){
+ const s=getSelection();
+ if(s?.rangeCount&&!s.isCollapsed){key('ArrowRight',39);collapseSelection();}
+}
 function focusParagraph(expected){
  const matches=[...document.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)&&[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join('')===expected);
- const visibleSlots=displaySlot?.parent?.isConnected?[...displaySlot.parent.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)):[];
- const slot=visibleSlots.length===displaySlot?.count?visibleSlots[displaySlot.index]:null;
+ const slot=resolveDisplaySlot(expected);
  const anchored=displayAnchor?.isConnected&&matches.includes(displayAnchor)?displayAnchor:matches.includes(slot)?slot:null;
  if(!anchored&&matches.length!==1)throw Error('无法唯一定位转换后的段落，已停止移动光标');
  const p=anchored||matches[0],r=p.getBoundingClientRect();
@@ -56,6 +71,14 @@ async function highlight(expected,ranges){
 async function message(e){
  if(e.origin!==origin||e.source!==frame()?.contentWindow||e.data?.channel!=='notemark.v2')return;
  if(e.data.hostCommand==='settings'){availableUntil=e.data.ready?performance.now()+2500:0;autoEnter=!!e.data.autoEnter;return;}
+ if(e.data.hostCommand==='generate'){
+  const {id}=e.data;if(typeof id!=='string'||seen.has(id))return;seen.add(id);if(seen.size>100)seen.delete(seen.values().next().value);
+  let outcome;
+  if(busy||composing)outcome={ok:false,error:'正在输入或转换，请稍后重试。'};
+  else if(performance.now()>availableUntil)outcome={ok:false,error:'请启用扩展快捷键并重新点击正文段落。'};
+  else outcome=await convert('generate',false);
+  e.source.postMessage({channel:'notemark.host',id,...outcome},origin);return;
+ }
  if(e.data.hostCommand==='highlight'){
   const {id,text:expected,ranges}=e.data;
   if(seen.has(id))return;seen.add(id);if(seen.size>100)seen.delete(seen.values().next().value);
@@ -76,7 +99,7 @@ async function convert(mode,newline){
   displayAnchor=candidates.length===1?candidates[0]:null;
   const outline=displayAnchor?.closest('.OutlineContent');
   const siblings=outline?[...outline.querySelectorAll('p.Paragraph')].filter(p=>!editor()?.contains(p)):[];
-  displaySlot=outline?{parent:outline,index:siblings.indexOf(displayAnchor),count:siblings.length}:null;
+  displaySlot=outline?{parent:outline,index:siblings.indexOf(displayAnchor),count:siblings.length,texts:siblings.map(paragraphText)}:null;
   const dom=siblings.length&&siblings.indexOf(displayAnchor)>=0?{index:siblings.indexOf(displayAnchor),texts:siblings.map(p=>[...p.querySelectorAll('.TextRun')].map(n=>n.textContent).join(''))}:null;
   const pinned=await request('anchor',dom).catch(e=>{e.wrote=false;throw e;});assertCurrent();
   key('Home',36);key('End',35,{shiftKey:true});
@@ -84,8 +107,8 @@ async function convert(mode,newline){
   if(transactionRevision!==revision)throw Error('检测到新输入，请检查当前段落；已停止移动光标');
   focusParagraph(result.text);key('End',35);collapseSelection();
   if(pendingNewline){pendingNewline=false;key('Enter',13);document.getElementById('ClearFormatting')?.click();}
-  notice(result.unchanged?'没有可转换标记':'NoteMark 已转换');
- }catch(e){notice(e.message);if(transactionRevision===revision)collapseSelection();if(e.wrote===false&&transactionRevision===revision&&editor()){key('End',35);if(newline)key('Enter',13);}}
+  notice(result.unchanged?'没有可转换标记':'NoteMark 已转换');return {ok:true};
+ }catch(e){notice(e.message);if(transactionRevision===revision)releaseHostSelection();if(e.wrote===false&&transactionRevision===revision&&editor()){key('End',35);if(newline)key('Enter',13);}return {ok:false,error:e.message};}
  finally{busy=false;pendingNewline=false;}
 }
 function start(){composing=true;availableUntil=0;revision++;}

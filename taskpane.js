@@ -89,7 +89,15 @@ async function run(mode,fromBridge=false,anchor=null){
  }catch(e){e.wrote=wrote;status(e.message||String(e));report({error:e.message||String(e),code:e.code});throw e;}
  finally{busy=false;controls.forEach(id=>$(id).disabled=!ready);}
 }
-for(const id of controls)$(id).onclick=()=>run(id).catch(()=>{});
+function generateCurrent(){
+ if(!$('bridge').checked||Date.now()-lastBridge>=4000)return run('generate');
+ const id=crypto.randomUUID();return new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{hostPending.delete(id);reject(Error('重新生成未响应，请重新点击正文段落后重试。'));},15000);
+  hostPending.set(id,{resolve,reject,timer});
+  parent.postMessage({channel:'notemark.v2',hostCommand:'generate',id},'https://onenote.officeapps.live.com');
+ });
+}
+for(const id of controls)$(id).onclick=()=> (id==='generate'?generateCurrent():run(id)).catch(e=>status(e.message||String(e)));
 $('backup').onclick=()=>{try{const r=JSON.parse(localStorage.getItem('notemark.pending.v1')||'null');$('backuptext').hidden=false;$('backuptext').value=r?.source||'没有备份记录';}catch(e){status('无法读取原文备份：'+e.message);}};
 $('clear').onclick=()=>{if(!store||!confirm('清空后无法精确恢复旧原文。确定清空本地记录？'))return;store.clear();$('backuptext').value='';status('本地原文记录已清空。');};
 // The paired extension runs only in the OneNote editor. Do not accept other origins or nested senders.
@@ -99,7 +107,7 @@ window.addEventListener('message',async e=>{
  if(e.data?.channel!=='notemark.v2')return;
  if(e.data.mode==='ping'){lastBridge=Date.now();updateBridge();}
  if(e.data.mode!=='ping'&&!$('bridge').checked)return;
- const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','ping','anchor'].includes(mode))return;
+ const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','generate','ping','anchor'].includes(mode))return;
  try{const result=mode==='ping'?{ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked}:mode==='anchor'?await snapshot(undefined,false,null,false,true,e.data.anchor):await run(mode,true,e.data.anchor);e.source.postMessage({channel:'notemark.v2',id,ok:true,result},e.origin);}
  catch(err){e.source.postMessage({channel:'notemark.v2',id,ok:false,error:err.message||String(err),wrote:err.wrote},e.origin);}
 });
