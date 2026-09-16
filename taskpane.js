@@ -13,7 +13,7 @@ $('autoenter').onchange=sendSettings;
 $('bridge').checked=true;$('autoenter').checked=true;
 const hostPending=new Map();
 function hostHighlight(text,ranges){const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{hostPending.delete(id);reject(Error('高亮步骤未响应，原文备份已保留'));},5000);hostPending.set(id,{resolve,reject,timer});parent.postMessage({channel:'notemark.v2',hostCommand:'highlight',id,text,ranges},'https://onenote.officeapps.live.com');});}
-function highlights(html){const doc=new DOMParser().parseFromString(html,'text/html'),ranges=[];let position=0;function walk(n,active=false){if(n.nodeType===3){if(active&&n.textContent)ranges.push({start:position,length:[...n.textContent].length,text:n.textContent});position+=[...n.textContent].length;return;}if(n.nodeType!==1)return;for(const child of n.childNodes)walk(child,active||!!n.style.backgroundColor);}walk(doc.body);return ranges;}
+function highlights(html){const doc=new DOMParser().parseFromString(html,'text/html'),ranges=[];let position=0;function walk(n,active=false){if(n.nodeType===3){if(active&&n.textContent)ranges.push({start:position,length:[...n.textContent].length,text:n.textContent});position+=[...n.textContent].length;return;}if(n.nodeType!==1)return;for(const child of n.childNodes)walk(child,active||(!n.getAttribute?.('data-notemark-decoration')&&!!n.style.backgroundColor));}walk(doc.body);return ranges;}
 try{store=new C.SourceStore(localStorage);}catch(e){$('status').textContent='浏览器存储不可用：'+e.message;}
 function report(v){$('log').textContent=(JSON.stringify(v,null,2)+'\n'+$('log').textContent).slice(0,12000);}
 function status(s){$('status').textContent=s;}
@@ -81,7 +81,7 @@ async function run(mode,fromBridge=false,anchor=null){
   if(await read()!==selected)throw Error('选区已变化，已取消。');
   // Do not retry writes: a delayed successful write must never be duplicated.
   const tw=performance.now();wrote=true;await write(html);const writeMs=performance.now()-tw;
-  const expected=restoring?source:C.parse(source).text;
+  const expected=restoring?source:C.renderHaru(source).text;
   if(ranges.length)await hostHighlight(expected,ranges);
   const after=await snapshot(expected,!restoring,anchor,true);
   if(after.text!==expected)throw Error('接口已返回，但正文未通过核对。请检查正文；未自动重试。');

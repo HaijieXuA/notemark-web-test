@@ -76,10 +76,17 @@ function renderHaru(source){
  const styles=['font-family:'+font,'color:'+(heading===1?'#461289':'#0c0c0c')];
  if(!heading||sizes[heading])styles.push('font-size:'+(heading?sizes[heading]:12)+'pt');
  if(heading)styles.push('font-weight:bold');
- if(heading===1)styles.push('border-bottom:3px solid #801eff');
+
  html=html.replace('<'+tag+'>','<'+tag+(heading===1?' style="text-align:center"':'')+'><span style="'+styles.join(';')+'">').replace('</'+tag+'>','</span></'+tag+'>');
- if(heading===2||heading===3){const color=heading===2?'#801eff':'#4169e1';html=html.replace('<h'+heading+'>','<h'+heading+'><span style="display:inline-block;width:10px;height:16px;border-left:10px solid '+color+';border-radius:4px;margin-right:12px"></span>');}
- return {...parsed,html};
+ if(heading===1)html=html.replace('<span style="','<u><span style="').replace('</span></h1>','</span></u></h1>');
+ let prefix='';
+ if(heading===2||heading===3){
+  const color=heading===2?'#801eff':'#4169e1',size=heading===2?15.5:12.5;
+  prefix='\u202f\u00a0 \u202f\u202f\u202f\u200b';
+  const decoration='<span data-notemark-decoration="true" style="color:#ffffff;background-color:'+color+';font-family:Omgnore,sans-serif;font-size:'+size+'pt">'+prefix.slice(0,4)+'</span><span>'+prefix.slice(4)+'</span>';
+  html=html.replace('<h'+heading+'>','<h'+heading+'>'+decoration);
+ }
+ return {...parsed,text:prefix+parsed.text,html};
 }
 // Serialize only supported inline formatting; never silently discard other content.
 function markdownFromRuns(runs,heading=0){
@@ -117,7 +124,18 @@ function fromHtml(html){
   if(css.backgroundColor&&css.backgroundColor!=='transparent'&&css.backgroundColor!=='rgba(0, 0, 0, 0)')next.highlight=true;
   for(const child of n.childNodes)walk(child,next);
  }
- walk(doc.body);return markdownFromRuns(runs,heading);
+ walk(doc.body);
+ const prefix='\u202f\u00a0 \u202f\u202f\u202f\u200b';
+ const all=runs.map(r=>r.text).join('');
+ if((heading===2||heading===3)&&all.startsWith(prefix)){
+  const first=doc.body.querySelector('span');
+  const bg=first?.style.backgroundColor;
+  const expected=heading===2?'rgb(128, 30, 255)':'rgb(65, 105, 225)';
+  if(bg===expected||bg===(heading===2?'#801eff':'#4169e1')){
+   let left=prefix.length;while(left&&runs.length){const n=Math.min(left,runs[0].text.length);runs[0].text=runs[0].text.slice(n);left-=n;if(!runs[0].text)runs.shift();}
+  }else throw Error('无法确认标题装饰格式，请使用已保存的原文还原。');
+ }
+ return markdownFromRuns(runs,heading);
 }
 // Compare effective character formatting, not OneNote's transient span layout.
 function fingerprint(html){
