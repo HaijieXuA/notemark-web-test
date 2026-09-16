@@ -76,7 +76,9 @@ function renderHaru(source){
  const styles=['font-family:'+font,'color:'+(heading===1?'#461289':'#0c0c0c')];
  if(!heading||sizes[heading])styles.push('font-size:'+(heading?sizes[heading]:12)+'pt');
  if(heading)styles.push('font-weight:bold');
+ if(heading===1)styles.push('border-bottom:3px solid #801eff');
  html=html.replace('<'+tag+'>','<'+tag+(heading===1?' style="text-align:center"':'')+'><span style="'+styles.join(';')+'">').replace('</'+tag+'>','</span></'+tag+'>');
+ if(heading===2||heading===3){const color=heading===2?'#801eff':'#4169e1';html=html.replace('<h'+heading+'>','<h'+heading+'><span style="display:inline-block;width:10px;height:16px;border-left:10px solid '+color+';border-radius:4px;margin-right:12px"></span>');}
  return {...parsed,html};
 }
 // Serialize only supported inline formatting; never silently discard other content.
