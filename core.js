@@ -122,6 +122,7 @@ function fromHtml(html){
   if(css.fontStyle)next.italic=css.fontStyle==='italic';
   if(css.textDecoration.includes('line-through'))next.strike=true;
   if(css.backgroundColor)next.background=css.backgroundColor;
+  if(css.fontSize)next.fontSize=css.fontSize;
   if(css.backgroundColor&&css.backgroundColor!=='transparent'&&css.backgroundColor!=='rgba(0, 0, 0, 0)')next.highlight=true;
   for(const child of n.childNodes)walk(child,next);
  }
@@ -130,7 +131,7 @@ function fromHtml(html){
  const all=runs.map(r=>r.text).join(''),prefix=prefixes.find(p=>all.startsWith(p));
  if((heading===2||heading===3)&&prefix){
   const expected=heading===2?'rgb(128, 30, 255)':'rgb(65, 105, 225)';
-  let checked=0;for(const r of runs){if(checked>=4)break;if(r.background!==expected&&r.background!==(heading===2?'#801eff':'#4169e1'))throw Error('无法确认标题装饰格式，请使用已保存的原文还原。');checked+=r.text.length;}
+  let checked=0;for(const r of runs){if(checked>=4)break;if(r.background!==expected&&r.background!==(heading===2?'#801eff':'#4169e1')&&!(!r.background&&r.fontSize===(heading===2?'15.5pt':'12.5pt')))throw Error('无法确认标题装饰格式，请使用已保存的原文还原。');checked+=r.text.length;}
   let left=prefix.length;while(left&&runs.length){const n=Math.min(left,runs[0].text.length);runs[0].text=runs[0].text.slice(n);left-=n;if(!runs[0].text)runs.shift();}
  }
  return markdownFromRuns(runs,heading);
@@ -150,6 +151,7 @@ function fingerprint(html){
   if(css.fontStyle)next.italic=css.fontStyle==='italic';
   if(css.textDecoration.includes('line-through'))next.strike=true;
   if(css.backgroundColor)next.background=css.backgroundColor;
+  if(css.fontSize)next.fontSize=css.fontSize;
   if(css.color)next.color=css.color;
   if(css.fontSize)next.size=css.fontSize;
   if(css.fontFamily)next.font=css.fontFamily;
