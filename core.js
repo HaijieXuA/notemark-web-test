@@ -72,10 +72,12 @@ function renderHaru(source){
  const parsed=parse(source),sizes={1:22.5,2:18.75,3:15,4:13.5,5:12};
  let html=parsed.html.replace(/<strong>/g,'<strong style="color:#5b32b4">').replace(/<em>/g,'<em style="color:#4169e1;text-decoration:underline">');
  const heading=parsed.heading,tag=heading?'h'+heading:'p';
- const font=heading?"Roboto Slab, Times, serif":"Glow Sans, Microsoft YaHei, serif";
+ const font=heading?"Roboto Slab":"Glow Sans";
  const styles=['font-family:'+font,'color:'+(heading===1?'#461289':'#0c0c0c')];
  if(!heading||sizes[heading])styles.push('font-size:'+(heading?sizes[heading]:12)+'pt');
  if(heading)styles.push('font-weight:bold');
+ // Explicit runs survive OneNote's single-family normalization better than a fallback list.
+ if(heading)html=html.split(/(<[^>]+>|&(?:#\d+|#x[\da-f]+|[a-z]+);)/gi).map(part=>part.startsWith('<')||part.startsWith('&')?part:part.replace(/[\p{Script=Han}\u3000-\u303f\uff01-\uff60]+/gu,text=>'<span style="font-family:SimSun">'+text+'</span>')).join('');
 
  html=html.replace('<'+tag+'>','<'+tag+(heading===1?' style="text-align:center"':'')+'><span style="'+styles.join(';')+'">').replace('</'+tag+'>','</span></'+tag+'>');
  if(heading===1)html=html.replace('<span style="','<u><span style="').replace('</span></h1>','</span></u></h1>');
