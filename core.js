@@ -94,7 +94,7 @@ function renderHaru(source,nativeList=null){
  if(parsed.list){
   const {type,start}=parsed.list;
   if(!['ol','ul'].includes(type)||!Number.isInteger(start)||start<0||start>999999998)throw Error('列表编号无效。');
-  prefix=(type==='ol'?start+'.':'•')+'\u00a0\u00a0\u00a0';
+  prefix=(type==='ol'?start+'.':'•')+'\u00a0\u00a0 ';
   const marker='<span data-notemark-list="'+type+'" style="font-family:Glow Sans;font-size:11pt;color:#6602e8">'+prefix+'</span>';
   html=html.replace('font-size:12pt','font-size:12.5pt;line-height:17.25pt').replace('<p>','<p style="margin-left:21.75pt;text-indent:-17.25pt;margin-top:0;margin-bottom:5.25pt">'+marker);
  }
@@ -146,7 +146,7 @@ function fromHtml(html,nativeList=null,visualHint=null){
  }
  walk(doc.body);
  let visibleList=null;
- const markerText=runs.map(r=>r.text).join('').match(/^(\d{1,9}\.|•)\u00a0{3}/);
+ const markerText=runs.map(r=>r.text).join('').match(/^(\d{1,9}\.|•)\u00a0{2}[\u00a0 ]/);
  if(markerText){
   const first=runs.find(r=>r.text.length);
   if(first&&(first.color==='#6602e8'||first.color==='rgb(102, 2, 232)'||(visualHint&&visualHint.type===(markerText[1]==='•'?'ul':'ol')&&visualHint.start===(markerText[1]==='•'?1:parseInt(markerText[1],10))))){
@@ -164,7 +164,7 @@ function fromHtml(html,nativeList=null,visualHint=null){
  list=visibleList||list;const markdown=markdownFromRuns(runs,heading);return list?(list.type==='ol'?list.start+'. ':'- ')+markdown:markdown;
 }
 // Compare effective character formatting, not OneNote's transient span layout.
-function fingerprint(html){
+function fingerprint(html,normalizeList=false){
  if(typeof DOMParser==='undefined')return html;
  const doc=new DOMParser().parseFromString(html,'text/html'),out=[];
  function walk(node,style={}){
@@ -180,7 +180,6 @@ function fingerprint(html){
   if(css.backgroundColor)next.background=css.backgroundColor;
   if(css.fontSize)next.fontSize=css.fontSize;
   if(css.color)next.color=css.color;
-  if(css.color)next.color=css.color;
   if(css.fontSize)next.size=css.fontSize;
   if(css.fontFamily)next.font=css.fontFamily;
   if(/^h[1-6]$/.test(tag))next.heading=tag;
@@ -188,15 +187,16 @@ function fingerprint(html){
   const normalized=Object.fromEntries(Object.entries(next).filter(([,v])=>v).sort(([a],[b])=>a.localeCompare(b)));
   for(const child of node.childNodes)walk(child,normalized);
  }
- walk(doc.body);return JSON.stringify(out);
+ walk(doc.body);if(normalizeList){const m=/^(?:\d{1,9}\.|•)\u00a0{2}[\u00a0 ]/.exec(out.map(x=>x[0]).join(''));if(m)out[m[0].length-1][0]=' ';}return JSON.stringify(out);
 }
+const normalizeListText=s=>s.replace(/^((?:\d{1,9}\.|•)\u00a0{2})[\u00a0 ]/,'$1 ');
 const stripEnd=s=>s.replace(/\r?\n$|\r$/,'');
 const key=c=>JSON.stringify([c.notebook,c.page,c.paragraph]);
 class SourceStore{
  constructor(storage){this.storage=storage;this.name='notemark.sources.v1';this.records={};try{const value=JSON.parse(storage.getItem(this.name)||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))this.records=Object.fromEntries(Object.entries(value).filter(([,v])=>v&&typeof v.source==='string'&&typeof v.at==='number'));}catch{}}
  prepare(context,source){this.storage.setItem('notemark.pending.v1',JSON.stringify({context,source,at:Date.now()}));}
  put(context,source,text,html){const records={...this.records,[key(context)]:{source,text,html,list:context.list||null,at:Date.now()}};const entries=Object.entries(records).sort((a,b)=>b[1].at-a[1].at).slice(0,500);this.storage.setItem(this.name,JSON.stringify(Object.fromEntries(entries)));this.records=Object.fromEntries(entries);}
- get(context,text,html){const r=this.records[key(context)];if(!r)return null;if(r.list&&(context.list||context.visualList)&&JSON.stringify(r.list)!==JSON.stringify(context.list||context.visualList))throw Error('列表编号已变化，请按当前格式重新生成 Markdown。');if(r.text!==text||fingerprint(r.html)!==fingerprint(html))throw Error('此段落渲染后已被编辑，不能用旧原文覆盖。');return r.source;}
+ get(context,text,html){const r=this.records[key(context)];if(!r)return null;if(r.list&&(context.list||context.visualList)&&JSON.stringify(r.list)!==JSON.stringify(context.list||context.visualList))throw Error('列表编号已变化，请按当前格式重新生成 Markdown。');if((r.list?normalizeListText(r.text)!==normalizeListText(text):r.text!==text)||fingerprint(r.html,!!r.list)!==fingerprint(html,!!r.list))throw Error('此段落渲染后已被编辑，不能用旧原文覆盖。');return r.source;}
  clear(){this.storage.removeItem(this.name);this.storage.removeItem('notemark.pending.v1');this.records={};}
 }
 const api={renderHaru,normalizeConfig,parseConfig,fromHtml,markdownFromRuns,parse,esc,stripEnd,SourceStore,fingerprint};if(typeof module!=='undefined')module.exports=api;else root.NoteMarkCore=api;
