@@ -76,7 +76,7 @@ async function run(mode,fromBridge=false,anchor=null){
    if(source===null){source=C.fromHtml(before.html);generated=true;}
    html='<p>'+C.esc(source)+'</p>';
   }
-  else{source=raw;const parsed=C.parse(source);if(!parsed.changed){status('当前行没有可转换的标记。');return {unchanged:true,text:raw};}html=parsed.html;ranges=highlights(html);if(ranges.length&&!fromBridge)throw Error('高亮需要配套网页扩展；本次未修改正文。');}
+  else{source=raw;const parsed=C.renderHaru(source);if(!parsed.changed){status('当前行没有可转换的标记。');return {unchanged:true,text:raw};}html=parsed.html;ranges=highlights(html);if(ranges.length&&!fromBridge)throw Error('高亮需要配套网页扩展；本次未修改正文。');}
   store.prepare(before,restoring?before.text:source);
   if(await read()!==selected)throw Error('选区已变化，已取消。');
   // Do not retry writes: a delayed successful write must never be duplicated.

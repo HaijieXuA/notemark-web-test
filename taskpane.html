@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NoteMark Web 0.2</title>
 <style>body{font:14px system-ui;margin:18px;color:#292333}h1{font-size:22px}button{padding:10px;margin:5px 0;width:100%;border:1px solid #b3a4c4;border-radius:7px;background:#f7f3fc}label{display:block;margin:12px 0}pre{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f0f5;padding:10px}small{color:#675e70}textarea{width:100%;box-sizing:border-box;height:64px}</style>
-<h1>NoteMark Web 0.2</h1><p id="status">正在连接 OneNote…</p>
+<h1>NoteMark Web 0.2</h1><p><small>内置 Haru 样式 · 标题、正文、粗体与斜体</small></p><p id="status">正在连接 OneNote…</p>
 <p>选中整行文字后转换。快捷键需要配套浏览器扩展，并保持本窗格打开。自动回车仍为实验功能，建议先在测试页试用。</p>
 <button id="convert" disabled>转换选中行</button><button id="restore" disabled>选中行切回 Markdown</button><button id="generate" disabled>按当前格式重新生成 Markdown</button><button id="inspect" disabled>检查当前行</button>
 <p id="connection">扩展未连接：回车、⌘, 和高亮不可用</p><small>切回时优先恢复保存的原文；没有记录时按当前格式生成。若原文记录已过期，可使用“重新生成”。不支持的内容会停止转换。</small><label><input type="checkbox" id="bridge" checked>启用扩展快捷键（实验）</label>
@@ -10,4 +10,4 @@
 <button id="backup">显示最近一次原文备份</button><textarea id="backuptext" readonly hidden aria-label="最近一次原文备份"></textarea>
 <button id="clear">清空本地原文记录</button>
 <details><summary>测试样例与诊断</summary><textarea readonly># 标题 **粗体** *斜体* ~~删除线~~ ==高亮==</textarea><pre id="log"></pre></details>
-<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><script src="core.js?v=0.2.12"></script><script src="taskpane.js?v=0.2.18"></script></html>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><script src="core.js?v=0.2.19"></script><script src="taskpane.js?v=0.2.19"></script></html>

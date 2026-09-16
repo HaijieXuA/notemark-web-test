@@ -1,7 +1,49 @@
 (function(root){
 'use strict';
 const esc=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function parse(source){
+// Strict, versioned style configuration. Unknown fields never silently disappear.
+function normalizeConfig(value){
+ const object=(v,label)=>{if(!v||typeof v!=='object'||Array.isArray(v))throw Error(label+' 必须是对象');};
+ object(value,'配置');
+ for(const k of Object.keys(value))if(!['version','name','headings'].includes(k))throw Error('不支持的配置字段：'+k);
+ if(value.version!==1)throw Error('配置 version 必须为 1；其他格式需要先适配');
+ if(value.name!==undefined&&(typeof value.name!=='string'||value.name.length>80))throw Error('name 必须是最多 80 字符的文本');
+ object(value.headings,'headings');
+ const headings={};
+ for(const [level,style] of Object.entries(value.headings)){
+  if(!/^h[1-6]$/.test(level))throw Error('不支持的标题级别：'+level);
+  object(style,level);const out={};
+  for(const [key,v] of Object.entries(style)){
+   if(!['fontFamily','fontSize','color','bold','italic'].includes(key))throw Error(level+' 不支持字段：'+key);
+   if(key==='fontFamily'&&(typeof v!=='string'||!v.trim()||v.length>100||/[;:{}<>"\\]/.test(v)))throw Error(level+' 字体名称无效');
+   if(key==='fontSize'&&(typeof v!=='number'||!Number.isFinite(v)||v<6||v>96))throw Error(level+' 字号必须为 6–96 的数字（磅）');
+   if(key==='color'&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))throw Error(level+' 颜色需为 #RRGGBB');
+   if(['bold','italic'].includes(key)&&typeof v!=='boolean')throw Error(level+' '+key+' 必须为布尔值');
+   out[key]=v;
+  }
+  headings[level]=out;
+ }
+ return {version:1,name:value.name||'自定义标题样式',headings};
+}
+function parseConfig(text){
+ if(typeof text!=='string'||text.length>65536)throw Error('配置文件不能超过 64 KB');
+ let value;try{value=JSON.parse(text.replace(/^\uFEFF/,''));}catch{throw Error('JSON 格式不正确');}
+ return normalizeConfig(value);
+}
+function headingStyle(config,heading){
+ const style=config?.headings?.['h'+heading];if(!style)return '';
+ const css=[];
+ for(const [key,value] of Object.entries(style)){
+  if(key==='fontFamily')css.push('font-family:'+value);
+  if(key==='fontSize')css.push('font-size:'+value+'pt');
+  if(key==='color')css.push('color:'+value);
+  if(key==='bold')css.push('font-weight:'+(value?'bold':'normal'));
+  if(key==='italic')css.push('font-style:'+(value?'italic':'normal'));
+ }
+ return css.join(';');
+}
+function parse(source,config=null){
+ if(config)config=normalizeConfig(config);
  if(typeof source!=='string'||/[\r\n]/.test(source)||source.length>10000)throw Error('请选择单个段落（最多 10000 字符）。');
  let heading=0, body=source, changed=false;
  const h=/^(#{1,6})\s+(.+)$/.exec(source); if(h){heading=h[1].length;body=h[2];changed=true;}
@@ -22,7 +64,20 @@ function parse(source){
   return {html,text};
  }
  const r=inline(body),tag=heading?'h'+heading:'p';
- return {source,text:r.text,html:'<'+tag+'>'+r.html+'</'+tag+'>',heading,changed};
+ const css=headingStyle(config,heading);
+ return {source,text:r.text,html:'<'+tag+'>'+(css?'<span style="'+esc(css)+'">'+r.html+'</span>':r.html)+'</'+tag+'>',heading,changed};
+}
+// Built-in Haru adaptation from the user's haru-8.css. No external CSS/fonts loaded.
+function renderHaru(source){
+ const parsed=parse(source),sizes={1:22.5,2:18.75,3:15,4:13.5,5:12};
+ let html=parsed.html.replace(/<strong>/g,'<strong style="color:#5b32b4">').replace(/<em>/g,'<em style="color:#4169e1;text-decoration:underline">');
+ const heading=parsed.heading,tag=heading?'h'+heading:'p';
+ const font=heading?"Roboto Slab, Times, serif":"Glow Sans, Microsoft YaHei, serif";
+ const styles=['font-family:'+font,'color:'+(heading===1?'#461289':'#0c0c0c')];
+ if(!heading||sizes[heading])styles.push('font-size:'+(heading?sizes[heading]:12)+'pt');
+ if(heading)styles.push('font-weight:bold');
+ html=html.replace('<'+tag+'>','<'+tag+(heading===1?' style="text-align:center"':'')+'><span style="'+styles.join(';')+'">').replace('</'+tag+'>','</span></'+tag+'>');
+ return {...parsed,html};
 }
 // Serialize only supported inline formatting; never silently discard other content.
 function markdownFromRuns(runs,heading=0){
@@ -96,5 +151,5 @@ class SourceStore{
  get(context,text,html){const r=this.records[key(context)];if(!r)return null;if(r.text!==text||fingerprint(r.html)!==fingerprint(html))throw Error('此段落渲染后已被编辑，不能用旧原文覆盖。');return r.source;}
  clear(){this.storage.removeItem(this.name);this.storage.removeItem('notemark.pending.v1');this.records={};}
 }
-const api={fromHtml,markdownFromRuns,parse,esc,stripEnd,SourceStore,fingerprint};if(typeof module!=='undefined')module.exports=api;else root.NoteMarkCore=api;
+const api={renderHaru,normalizeConfig,parseConfig,fromHtml,markdownFromRuns,parse,esc,stripEnd,SourceStore,fingerprint};if(typeof module!=='undefined')module.exports=api;else root.NoteMarkCore=api;
 })(globalThis);
