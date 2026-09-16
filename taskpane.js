@@ -53,10 +53,11 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
   p=matches[0];textLoaded=true;
  }
  if(p.type!=='RichText')throw Error('当前段落不是文字。');
- let html;
+ const listInfo=p.getParagraphInfo?.();let html;
  if(includeHtml){p.richText.load('text');html=p.richText.getHtml();await ctx.sync();}
- else if(!textLoaded){p.richText.load('text');await ctx.sync();}
- return {location,notebook:book.id,page:page.id,paragraph:p.id,text:C.stripEnd(p.richText.text),html:html?.value};
+ else if(!textLoaded){p.richText.load('text');await ctx.sync();}else if(listInfo)await ctx.sync();
+ const info=listInfo?.value;let list=null;if(info&&info.listType!=='None'){if(info.listType==='Number'&&info.numberType!=='Arabic')throw Error('暂不转换这种编号样式。');list={type:info.listType==='Number'?'ol':'ul',start:Math.max(1,Number(info.index)||1)};}
+ return {list,location,notebook:book.id,page:page.id,paragraph:p.id,text:C.stripEnd(p.richText.text),html:html?.value};
 });}
 const read=()=>new Promise((resolve,reject)=>Office.context.document.getSelectedDataAsync(Office.CoercionType.Text,r=>r.status===Office.AsyncResultStatus.Succeeded?resolve(r.value):reject(r.error)));
 const write=html=>new Promise((resolve,reject)=>Office.context.document.setSelectedDataAsync(html,{coercionType:Office.CoercionType.Html},r=>r.status===Office.AsyncResultStatus.Succeeded?resolve():reject(r.error)));
@@ -73,20 +74,20 @@ async function run(mode,fromBridge=false,anchor=null){
   let html,source,ranges=[],generated=false;const restoring=mode==='restore'||mode==='generate';
   if(restoring){
    source=mode==='generate'?null:store.get(before,before.text,before.html);
-   if(source===null){source=C.fromHtml(before.html);generated=true;}
+   if(source===null){source=C.fromHtml(before.html,before.list);generated=true;}
    html='<p>'+C.esc(source)+'</p>';
   }
-  else{source=raw;const parsed=C.renderHaru(source);if(!parsed.changed){status('当前行没有可转换的标记。');return {unchanged:true,text:raw};}html=parsed.html;ranges=highlights(html);if(ranges.length&&!fromBridge)throw Error('高亮需要配套网页扩展；本次未修改正文。');}
+  else{source=raw;const parsed=C.renderHaru(source,before.list);if(!parsed.changed){status('当前行没有可转换的标记。');return {unchanged:true,text:raw};}html=parsed.html;ranges=highlights(html);if(ranges.length&&!fromBridge)throw Error('高亮需要配套网页扩展；本次未修改正文。');}
   store.prepare(before,restoring?before.text:source);
   if(await read()!==selected)throw Error('选区已变化，已取消。');
   // Do not retry writes: a delayed successful write must never be duplicated.
   const tw=performance.now();wrote=true;await write(html);const writeMs=performance.now()-tw;
-  const expected=restoring?source:C.renderHaru(source).text;
+  const expected=restoring?source:C.renderHaru(source,before.list).text;
   if(ranges.length)await hostHighlight(expected,ranges);
   const after=await snapshot(expected,!restoring,anchor,true);
   if(after.text!==expected)throw Error('接口已返回，但正文未通过核对。请检查正文；未自动重试。');
   if(!restoring)store.put(after,source,after.text,after.html);
-  const result={mode,generated,text:expected,readMs,writeMs,verifyMs:performance.now()-tw-writeMs,totalMs:performance.now()-start,paragraph:after.paragraph};report(result);status((generated?'已根据当前格式生成 Markdown（接口未提供的高亮无法恢复）。':'已完成。')+' 耗时 '+Math.round(result.totalMs)+' ms。');return result;
+  const result={list:restoring?null:C.renderHaru(source,before.list).list,mode,generated,text:expected,readMs,writeMs,verifyMs:performance.now()-tw-writeMs,totalMs:performance.now()-start,paragraph:after.paragraph};report(result);status((generated?'已根据当前格式生成 Markdown（接口未提供的高亮无法恢复）。':'已完成。')+' 耗时 '+Math.round(result.totalMs)+' ms。');return result;
  }catch(e){e.wrote=wrote;status(e.message||String(e));report({error:e.message||String(e),code:e.code});throw e;}
  finally{busy=false;controls.forEach(id=>$(id).disabled=!ready);}
 }

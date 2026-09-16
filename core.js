@@ -45,8 +45,11 @@ function headingStyle(config,heading){
 function parse(source,config=null){
  if(config)config=normalizeConfig(config);
  if(typeof source!=='string'||/[\r\n]/.test(source)||source.length>10000)throw Error('请选择单个段落（最多 10000 字符）。');
- let heading=0, body=source, changed=false;
- const h=/^(#{1,6})\s+(.+)$/.exec(source); if(h){heading=h[1].length;body=h[2];changed=true;}
+ let heading=0, body=source, changed=false,list=null;
+ const lm=/^(?:(\d{1,9})[.)]|([-+*]))[ \t]+(\S.*)$/.exec(source);
+ if(lm){list={type:lm[1]?'ol':'ul',start:lm[1]?Number(lm[1]):1};body=lm[3];changed=true;}
+ if(/^[ \t]+(?:\d+[.)]|[-+*])[ \t]+/.test(source))throw Error('暂不转换嵌套列表，请先使用一级列表。');
+ const h=list?null:/^(#{1,6})\s+(.+)$/.exec(source); if(h){heading=h[1].length;body=h[2];changed=true;}
  function inline(s,depth=0){
   if(depth>16)return {html:esc(s),text:s};
   let html='',text='';
@@ -65,11 +68,11 @@ function parse(source,config=null){
  }
  const r=inline(body),tag=heading?'h'+heading:'p';
  const css=headingStyle(config,heading);
- return {source,text:r.text,html:'<'+tag+'>'+(css?'<span style="'+esc(css)+'">'+r.html+'</span>':r.html)+'</'+tag+'>',heading,changed};
+ return {source,text:r.text,html:'<'+tag+'>'+(css?'<span style="'+esc(css)+'">'+r.html+'</span>':r.html)+'</'+tag+'>',heading,changed,list};
 }
 // Built-in Haru adaptation from the user's haru-8.css. No external CSS/fonts loaded.
-function renderHaru(source){
- const parsed=parse(source),sizes={1:22.5,2:18.75,3:15,4:13.5,5:12};
+function renderHaru(source,nativeList=null){
+ const parsed=parse(source);if(!parsed.list&&nativeList){if(parsed.heading)throw Error('请先退出列表再转换标题。');parsed.list=nativeList;parsed.changed=true;}const sizes={1:22.5,2:18.75,3:15,4:13.5,5:12};
  let html=parsed.html.replace(/<strong>/g,'<strong style="color:#5b32b4">').replace(/<em>/g,'<em style="color:#4169e1;text-decoration:underline">');
  const heading=parsed.heading,tag=heading?'h'+heading:'p';
  const font=heading?"Roboto Slab":"Glow Sans";
@@ -87,6 +90,12 @@ function renderHaru(source){
   prefix='\u202f\u00a0 \u202f\u202f\u202f ';
   const decoration='<span data-notemark-decoration="true" style="color:#ffffff;background-color:'+color+';font-family:Omgnore,sans-serif;font-size:'+size+'pt">'+prefix.slice(0,4)+'</span><span>'+prefix.slice(4)+'</span>';
   html=html.replace('<h'+heading+'>','<h'+heading+'>'+decoration);
+ }
+ if(parsed.list){
+  const {type,start}=parsed.list;
+  if(!['ol','ul'].includes(type)||!Number.isInteger(start)||start<0||start>999999999)throw Error('列表编号无效。');
+  html=html.replace('font-size:12pt','font-size:12.5pt;line-height:17.25pt').replace('<p>','<p style="margin-top:0;margin-bottom:5.25pt">');
+  html='<'+type+(type==='ol'?' start="'+start+'"':'')+' style="list-style-type:'+(type==='ol'?'decimal':'disc')+'"><li style="font-family:Glow Sans;font-size:11pt;color:#6602e8">'+html+'</li></'+type+'>';
  }
  return {...parsed,text:prefix+parsed.text,html};
 }
@@ -106,9 +115,13 @@ function markdownFromRuns(runs,heading=0){
  if(parse(source).text!==expected)throw Error('当前格式组合无法可靠生成 Markdown，正文未修改。');
  return source;
 }
-function fromHtml(html){
+function fromHtml(html,nativeList=null){
  const doc=new DOMParser().parseFromString(html,'text/html'),runs=[];let heading=0;
- if(doc.querySelector('table,img,a,code,pre,ul,ol,br,script,style'))throw Error('本段含暂不支持还原的内容，正文未修改。');
+ if(doc.querySelector('table,img,a,code,pre,br,script,style'))throw Error('本段含暂不支持还原的内容，正文未修改。');
+ const lists=doc.querySelectorAll('ol,ul'),items=doc.querySelectorAll('li');
+ if(lists.length>1||items.length>1)throw Error('请只还原单个一级列表项。');
+ let list=nativeList;
+ if(lists.length){const el=lists[0],type=el.tagName.toLowerCase();list={type,start:Number(el.getAttribute('start')||1)};}
  const blocks=doc.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
  if(blocks.length>1)throw Error('请只选择一个段落。');
  function walk(n,style={}){
@@ -136,7 +149,7 @@ function fromHtml(html){
   let checked=0;for(const r of runs){if(checked>=4)break;if(r.background!==expected&&r.background!==(heading===2?'#801eff':'#4169e1')&&!(!r.background&&r.fontSize===(heading===2?'15.5pt':'12.5pt')))throw Error('无法确认标题装饰格式，请使用已保存的原文还原。');checked+=r.text.length;}
   let left=prefix.length;while(left&&runs.length){const n=Math.min(left,runs[0].text.length);runs[0].text=runs[0].text.slice(n);left-=n;if(!runs[0].text)runs.shift();}
  }
- return markdownFromRuns(runs,heading);
+ const markdown=markdownFromRuns(runs,heading);return list?(list.type==='ol'?list.start+'. ':'- ')+markdown:markdown;
 }
 // Compare effective character formatting, not OneNote's transient span layout.
 function fingerprint(html){
