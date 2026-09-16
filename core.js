@@ -46,7 +46,7 @@ function parse(source,config=null){
  if(config)config=normalizeConfig(config);
  if(typeof source!=='string'||/[\r\n]/.test(source)||source.length>10000)throw Error('请选择单个段落（最多 10000 字符）。');
  let heading=0, body=source, changed=false,list=null;
- const lm=/^(?:(\d{1,9})[.)]|([-+*]))[ \t]+(\S.*)$/.exec(source);
+ const lm=/^(?:(\d{1,9})[.)]|([-+*]))[ \t\u00a0]+(\S.*)$/.exec(source);
  if(lm){list={type:lm[1]?'ol':'ul',start:lm[1]?Number(lm[1]):1};body=lm[3];changed=true;}
  if(/^[ \t]+(?:\d+[.)]|[-+*])[ \t]+/.test(source))throw Error('暂不转换嵌套列表，请先使用一级列表。');
  const h=list?null:/^(#{1,6})\s+(.+)$/.exec(source); if(h){heading=h[1].length;body=h[2];changed=true;}
@@ -93,10 +93,12 @@ function renderHaru(source,nativeList=null){
  }
  if(parsed.list){
   const {type,start}=parsed.list;
-  if(!['ol','ul'].includes(type)||!Number.isInteger(start)||start<0||start>999999999)throw Error('列表编号无效。');
-  html=html.replace('font-size:12pt','font-size:12.5pt;line-height:17.25pt').replace('<p>','<p style="margin-top:0;margin-bottom:5.25pt">');
-  html='<'+type+(type==='ol'?' start="'+start+'"':'')+' style="list-style-type:'+(type==='ol'?'decimal':'disc')+'"><li style="font-family:Glow Sans;font-size:11pt;color:#6602e8">'+html+'</li></'+type+'>';
+  if(!['ol','ul'].includes(type)||!Number.isInteger(start)||start<0||start>999999998)throw Error('列表编号无效。');
+  prefix=(type==='ol'?start+'.':'•')+'\u00a0\u00a0\u00a0';
+  const marker='<span data-notemark-list="'+type+'" style="font-family:Glow Sans;font-size:11pt;color:#6602e8">'+prefix+'</span>';
+  html=html.replace('font-size:12pt','font-size:12.5pt;line-height:17.25pt').replace('<p>','<p style="margin-left:21.75pt;text-indent:-17.25pt;margin-top:0;margin-bottom:5.25pt">'+marker);
  }
+
  return {...parsed,text:prefix+parsed.text,html};
 }
 // Serialize only supported inline formatting; never silently discard other content.
@@ -115,7 +117,7 @@ function markdownFromRuns(runs,heading=0){
  if(parse(source).text!==expected)throw Error('当前格式组合无法可靠生成 Markdown，正文未修改。');
  return source;
 }
-function fromHtml(html,nativeList=null){
+function fromHtml(html,nativeList=null,visualHint=null){
  const doc=new DOMParser().parseFromString(html,'text/html'),runs=[];let heading=0;
  if(doc.querySelector('table,img,a,code,pre,br,script,style'))throw Error('本段含暂不支持还原的内容，正文未修改。');
  const lists=doc.querySelectorAll('ol,ul'),items=doc.querySelectorAll('li');
@@ -138,10 +140,20 @@ function fromHtml(html,nativeList=null){
   if(css.textDecoration.includes('line-through'))next.strike=true;
   if(css.backgroundColor)next.background=css.backgroundColor;
   if(css.fontSize)next.fontSize=css.fontSize;
+  if(css.color)next.color=css.color;
   if(css.backgroundColor&&css.backgroundColor!=='transparent'&&css.backgroundColor!=='rgba(0, 0, 0, 0)')next.highlight=true;
   for(const child of n.childNodes)walk(child,next);
  }
  walk(doc.body);
+ let visibleList=null;
+ const markerText=runs.map(r=>r.text).join('').match(/^(\d{1,9}\.|•)\u00a0{3}/);
+ if(markerText){
+  const first=runs.find(r=>r.text.length);
+  if(first&&(first.color==='#6602e8'||first.color==='rgb(102, 2, 232)'||(visualHint&&visualHint.type===(markerText[1]==='•'?'ul':'ol')&&visualHint.start===(markerText[1]==='•'?1:parseInt(markerText[1],10))))){
+   visibleList={type:markerText[1]==='•'?'ul':'ol',start:markerText[1]==='•'?1:parseInt(markerText[1],10)};
+   let left=markerText[0].length;while(left&&runs.length){const n=Math.min(left,runs[0].text.length);runs[0].text=runs[0].text.slice(n);left-=n;if(!runs[0].text)runs.shift();}
+  }
+ }
  const prefixes=['\u202f\u00a0 \u202f\u202f\u202f ','\u202f\u00a0 \u202f\u202f\u202f\u200b'];
  const all=runs.map(r=>r.text).join(''),prefix=prefixes.find(p=>all.startsWith(p));
  if((heading===2||heading===3)&&prefix){
@@ -149,7 +161,7 @@ function fromHtml(html,nativeList=null){
   let checked=0;for(const r of runs){if(checked>=4)break;if(r.background!==expected&&r.background!==(heading===2?'#801eff':'#4169e1')&&!(!r.background&&r.fontSize===(heading===2?'15.5pt':'12.5pt')))throw Error('无法确认标题装饰格式，请使用已保存的原文还原。');checked+=r.text.length;}
   let left=prefix.length;while(left&&runs.length){const n=Math.min(left,runs[0].text.length);runs[0].text=runs[0].text.slice(n);left-=n;if(!runs[0].text)runs.shift();}
  }
- const markdown=markdownFromRuns(runs,heading);return list?(list.type==='ol'?list.start+'. ':'- ')+markdown:markdown;
+ list=visibleList||list;const markdown=markdownFromRuns(runs,heading);return list?(list.type==='ol'?list.start+'. ':'- ')+markdown:markdown;
 }
 // Compare effective character formatting, not OneNote's transient span layout.
 function fingerprint(html){
@@ -168,6 +180,7 @@ function fingerprint(html){
   if(css.backgroundColor)next.background=css.backgroundColor;
   if(css.fontSize)next.fontSize=css.fontSize;
   if(css.color)next.color=css.color;
+  if(css.color)next.color=css.color;
   if(css.fontSize)next.size=css.fontSize;
   if(css.fontFamily)next.font=css.fontFamily;
   if(/^h[1-6]$/.test(tag))next.heading=tag;
@@ -182,8 +195,8 @@ const key=c=>JSON.stringify([c.notebook,c.page,c.paragraph]);
 class SourceStore{
  constructor(storage){this.storage=storage;this.name='notemark.sources.v1';this.records={};try{const value=JSON.parse(storage.getItem(this.name)||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))this.records=Object.fromEntries(Object.entries(value).filter(([,v])=>v&&typeof v.source==='string'&&typeof v.at==='number'));}catch{}}
  prepare(context,source){this.storage.setItem('notemark.pending.v1',JSON.stringify({context,source,at:Date.now()}));}
- put(context,source,text,html){const records={...this.records,[key(context)]:{source,text,html,at:Date.now()}};const entries=Object.entries(records).sort((a,b)=>b[1].at-a[1].at).slice(0,500);this.storage.setItem(this.name,JSON.stringify(Object.fromEntries(entries)));this.records=Object.fromEntries(entries);}
- get(context,text,html){const r=this.records[key(context)];if(!r)return null;if(r.text!==text||fingerprint(r.html)!==fingerprint(html))throw Error('此段落渲染后已被编辑，不能用旧原文覆盖。');return r.source;}
+ put(context,source,text,html){const records={...this.records,[key(context)]:{source,text,html,list:context.list||null,at:Date.now()}};const entries=Object.entries(records).sort((a,b)=>b[1].at-a[1].at).slice(0,500);this.storage.setItem(this.name,JSON.stringify(Object.fromEntries(entries)));this.records=Object.fromEntries(entries);}
+ get(context,text,html){const r=this.records[key(context)];if(!r)return null;if(r.list&&(context.list||context.visualList)&&JSON.stringify(r.list)!==JSON.stringify(context.list||context.visualList))throw Error('列表编号已变化，请按当前格式重新生成 Markdown。');if(r.text!==text||fingerprint(r.html)!==fingerprint(html))throw Error('此段落渲染后已被编辑，不能用旧原文覆盖。');return r.source;}
  clear(){this.storage.removeItem(this.name);this.storage.removeItem('notemark.pending.v1');this.records={};}
 }
 const api={renderHaru,normalizeConfig,parseConfig,fromHtml,markdownFromRuns,parse,esc,stripEnd,SourceStore,fingerprint};if(typeof module!=='undefined')module.exports=api;else root.NoteMarkCore=api;
