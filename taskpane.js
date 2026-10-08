@@ -11,6 +11,10 @@ function sendSettings(){parent.postMessage({channel:'notemark.v2',hostCommand:'s
 $('bridge').onchange=()=>{updateBridge();sendSettings();};
 $('autoenter').onchange=sendSettings;
 $('bridge').checked=true;$('autoenter').checked=true;
+const allPagesKey='notemark.settings.allpages.v1';
+$('allpages').checked=true;
+try{$('allpages').checked=localStorage.getItem(allPagesKey)!=='false';}catch{}
+$('allpages').onchange=()=>{try{localStorage.setItem(allPagesKey,String($('allpages').checked));}catch{status('当前选择已生效，但浏览器无法保存此设置。');}};
 const hostPending=new Map();
 function hostHighlight(text,ranges){const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{hostPending.delete(id);reject(Error('高亮步骤未响应，原文备份已保留'));},5000);hostPending.set(id,{resolve,reject,timer});parent.postMessage({channel:'notemark.v2',hostCommand:'highlight',id,text,ranges},'https://onenote.officeapps.live.com');});}
 function hostRemoveList(text){const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{hostPending.delete(id);reject(Error('清除原生列表编号超时，请检查当前行'));},5000);hostPending.set(id,{resolve,reject,timer});parent.postMessage({channel:'notemark.v2',hostCommand:'removeList',id,text},'https://onenote.officeapps.live.com');});}
@@ -18,12 +22,38 @@ function highlights(html){const doc=new DOMParser().parseFromString(html,'text/h
 try{store=new C.SourceStore(localStorage);}catch(e){$('status').textContent='浏览器存储不可用：'+e.message;}
 function report(v){$('log').textContent=(JSON.stringify(v,null,2)+'\n'+$('log').textContent).slice(0,12000);}
 function status(s){$('status').textContent=s;}
+// The web editor may expose extra empty layout paragraphs absent from Office.js.
+// Match the complete ordered sequence; never skip text or guess between blank targets.
+function locateDomParagraph(dom,items){
+ const fail=()=>{throw Error('不能唯一对应当前段落，请重新点击文字后再试。');};
+ if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.index<0||dom.index>=dom.texts.length||dom.texts.some(t=>typeof t!=='string')||items.some(p=>p.type!=='RichText'))return fail();
+ const a=dom.texts.map(C.stripEnd),b=items.map(p=>C.stripEnd(p.richText.text));
+ const same=(x,y)=>x===y||x+'\u00a0'===y||x===y+'\u00a0';
+ if(a.length===b.length){if(a.some((t,i)=>!same(t,b[i])))return fail();return dom.index;}
+ if(a.length<b.length||(a.length+1)*(b.length+1)>1000000)return fail();
+ const empty=t=>/^[ \u00a0]*$/.test(t),n=a.length,m=b.length;
+ const forward=Array.from({length:n+1},()=>new Uint8Array(m+1));
+ const backward=Array.from({length:n+1},()=>new Uint8Array(m+1));
+ forward[0][0]=1;backward[n][m]=1;
+ for(let i=0;i<n;i++)for(let j=0;j<=m;j++)if(forward[i][j]){
+  if(empty(a[i]))forward[i+1][j]=1;
+  if(j<m&&same(a[i],b[j]))forward[i+1][j+1]=1;
+ }
+ if(!forward[n][m])return fail();
+ for(let i=n-1;i>=0;i--)for(let j=m;j>=0;j--)backward[i][j]=Number((empty(a[i])&&backward[i+1][j])||(j<m&&same(a[i],b[j])&&backward[i+1][j+1]));
+ const i=dom.index,candidates=[];
+ for(let j=0;j<=m;j++)if(forward[i][j]){
+  if(empty(a[i])&&backward[i+1][j])return fail();
+  if(j<m&&same(a[i],b[j])&&backward[i+1][j+1])candidates.push(j);
+ }
+ if(candidates.length!==1)return fail();return candidates[0];
+}
 async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,capture=false,dom=null){return OneNote.run(async ctx=>{
  const app=ctx.application,book=app.getActiveNotebook(),page=app.getActivePage();
  let p=anchor?null:app.getActiveParagraph(),textLoaded=false,location;
  const outline=app.getActiveOutline();
  book.load('id');page.load('id,title');if(p)p.load('id,type');await ctx.sync();
- if(!$('allpages').checked&&page.title.trim()!=='NoteMark Web Test')throw Error('默认仅在 NoteMark Web Test 页操作。');
+ if(!$('allpages').checked&&page.title.trim()!=='NoteMark Web Test')throw Error('已限制为测试页；请开启“允许在其他页面使用”。');
  if(anchor||capture){
   outline.load('id');const ps=outline.paragraphs;ps.load('items/id,items/type,items/richText/text');await ctx.sync();
   if(anchor){
@@ -36,10 +66,7 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
    textLoaded=true;location=anchor;
   }else{
    if(p.isNullObject){
-    if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.texts.length!==ps.items.length||dom.index<0||dom.index>=ps.items.length)throw Error('段落结构核对失败（页面 '+(dom?.texts?.length??0)+'，OneNote '+ps.items.length+'），已取消。');
-    const mismatch=ps.items.findIndex((x,i)=>{if(x.type!=='RichText')return true;const a=C.stripEnd(x.richText.text),b=C.stripEnd(dom.texts[i]);return a!==b&&a+'\u00a0'!==b&&a!==b+'\u00a0';});
-    if(mismatch>=0)throw Error('第 '+(mismatch+1)+' 段文字核对不一致，已取消定位。');
-    p=ps.items[dom.index];
+    p=ps.items[locateDomParagraph(dom,ps.items)];
    }
    const index=ps.items.findIndex(x=>x.id===p.id);if(index<0)throw Error('无法记录当前段落位置。');
    location={notebook:book.id,page:page.id,outline:outline.id,paragraph:p.id,index,count:ps.items.length,ids:ps.items.map(x=>x.id)};
