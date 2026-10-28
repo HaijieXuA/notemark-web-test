@@ -71,6 +71,7 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
    const extra=afterWrite&&ps.items.length===anchor.count+1&&ps.items[anchor.index+1]?.type==='RichText'&&C.stripEnd(ps.items[anchor.index+1].richText.text).trim()==='';
    if(ps.items.length!==anchor.count&&!extra)throw Error('写入后段落数量变化（'+anchor.count+'→'+ps.items.length+'），已停止定位。');
    if(extra&&(!anchor.ids||ps.items.filter((x,i)=>i!==anchor.index+1).some((x,i)=>i!==anchor.index&&x.id!==anchor.ids[i])))throw Error('相邻段落已变化，已停止定位。');
+   if(!afterWrite&&anchor.ids&&ps.items.some((x,i)=>i!==anchor.index&&x.id!==anchor.ids[i]))throw Error('相邻段落已变化，已停止定位。');
    p=afterWrite?ps.items[anchor.index]:ps.items.find(x=>x.id===anchor.paragraph);
    if(!p||(!afterWrite&&ps.items[anchor.index]?.id!==p.id))throw Error('原段落已移动，已取消。');
    if(extra){
@@ -79,9 +80,11 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
     blank.paragraphs.load('items/id');await ctx.sync();
     if(blank.paragraphs.items.length)throw Error('新增段落包含子内容，已停止清理。');
     // Only the new, empty sibling from this write may be removed; existing blanks stay.
-    blank.delete();await ctx.sync();ps.load('items/id,items/type,items/richText/text');await ctx.sync();
-    if(ps.items.length!==anchor.count||ps.items.some((x,i)=>i!==anchor.index&&x.id!==anchor.ids[i]))throw Error('空段落清理后结构核对失败。');
-    p=ps.items[anchor.index];
+    blank.delete();await ctx.sync();
+    // OneNote caches collection items within a request context after delete.
+    // Re-read in a fresh context without enabling another cleanup attempt.
+    const clean=await snapshot(hint,includeHtml,{...anchor,paragraph:p.id},false);
+    return clean;
    }
    textLoaded=true;location=anchor;
   }else{
