@@ -26,9 +26,19 @@ function status(s){$('status').textContent=s;}
 // Match the complete ordered sequence; never skip text or guess between blank targets.
 function locateDomParagraph(dom,items){
  const fail=()=>{throw Error('不能唯一对应当前段落，请重新点击文字后再试。');};
- if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.index<0||dom.index>=dom.texts.length||dom.texts.some(t=>typeof t!=='string')||items.some(p=>p.type!=='RichText'))return fail();
- const a=dom.texts.map(C.stripEnd),b=items.map(p=>C.stripEnd(p.richText.text));
+ if(!dom||!Number.isInteger(dom.index)||!Array.isArray(dom.texts)||dom.index<0||dom.index>=dom.texts.length||dom.texts.some(t=>typeof t!=='string'))return fail();
+ const a=dom.texts.map(C.stripEnd);
  const same=(x,y)=>x===y||x+'\u00a0'===y||x===y+'\u00a0';
+ const target=a[dom.index];
+ // A unique complete target in the active outline does not depend on unrelated
+ // nested lists, images or stale display rows elsewhere in the outline.
+ if(target.trim()&&a.filter(t=>same(t,target)).length===1){
+  const candidates=items.map((p,i)=>p.type==='RichText'&&same(C.stripEnd(p.richText.text),target)?i:-1).filter(i=>i>=0);
+  if(candidates.length===1)return candidates[0];
+ }
+ // Repeated/blank text still needs complete ordered structural evidence.
+ if(items.some(p=>p.type!=='RichText'))return fail();
+ const b=items.map(p=>C.stripEnd(p.richText.text));
  if(a.length===b.length){if(a.some((t,i)=>!same(t,b[i])))return fail();return dom.index;}
  if(a.length<b.length||(a.length+1)*(b.length+1)>1000000)return fail();
  const empty=t=>/^[ \u00a0]*$/.test(t),n=a.length,m=b.length;
@@ -100,9 +110,14 @@ async function run(mode,fromBridge=false,anchor=null){
   const readMs=performance.now()-start;
   const raw=C.stripEnd(selected);
   if(!raw||raw!==before.text)throw Error('请完整选中当前段落，避免覆盖部分文字。');
-  let html,source,ranges=[],generated=false;const restoring=mode==='restore'||mode==='generate';
+  let html,source,ranges=[],generated=false;
+  if(mode==='toggle'){
+   const exact=store.get(before,before.text,before.html,{allowStale:true});
+   mode=exact!==null?'restore':(!before.list&&!before.visualList&&C.parse(raw).changed?'convert':'restore');
+  }
+  const restoring=mode==='restore'||mode==='generate';
   if(restoring){
-   source=mode==='generate'?null:store.get(before,before.text,before.html);
+   source=mode==='generate'?null:store.get(before,before.text,before.html,{allowStale:true});
    if(source===null){source=C.fromHtml(before.html,before.list,before.visualList);generated=true;}
    html='<p>'+C.esc(source)+'</p>';
   }
@@ -151,7 +166,7 @@ window.addEventListener('message',async e=>{
  if(e.data?.channel!=='notemark.v2')return;
  if(e.data.mode==='ping'){lastBridge=Date.now();updateBridge();}
  if(e.data.mode!=='ping'&&!$('bridge').checked)return;
- const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','generate','ping','anchor','continue'].includes(mode))return;
+ const {id,mode}=e.data;if(typeof id!=='string'||!['convert','restore','toggle','generate','ping','anchor','continue'].includes(mode))return;
  try{const result=mode==='ping'?{ready:ready&&!busy&&$('bridge').checked,autoEnter:$('autoenter').checked}:mode==='anchor'?await snapshot(undefined,false,null,false,true,e.data.anchor):mode==='continue'?await continueList(e.data.anchor):await run(mode,true,e.data.anchor);e.source.postMessage({channel:'notemark.v2',id,ok:true,result},e.origin);}
  catch(err){e.source.postMessage({channel:'notemark.v2',id,ok:false,error:err.message||String(err),wrote:err.wrote},e.origin);}
 });
