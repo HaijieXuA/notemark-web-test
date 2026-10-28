@@ -73,6 +73,16 @@ async function snapshot(hint,includeHtml=true,anchor=null,afterWrite=false,captu
    if(extra&&(!anchor.ids||ps.items.filter((x,i)=>i!==anchor.index+1).some((x,i)=>i!==anchor.index&&x.id!==anchor.ids[i])))throw Error('相邻段落已变化，已停止定位。');
    p=afterWrite?ps.items[anchor.index]:ps.items.find(x=>x.id===anchor.paragraph);
    if(!p||(!afterWrite&&ps.items[anchor.index]?.id!==p.id))throw Error('原段落已移动，已取消。');
+   if(extra){
+    const blank=ps.items[anchor.index+1];
+    if(anchor.ids.includes(blank.id)||C.stripEnd(p.richText.text)!==hint)throw Error('新增空段落核对失败，已停止清理。');
+    blank.paragraphs.load('items/id');await ctx.sync();
+    if(blank.paragraphs.items.length)throw Error('新增段落包含子内容，已停止清理。');
+    // Only the new, empty sibling from this write may be removed; existing blanks stay.
+    blank.delete();await ctx.sync();ps.load('items/id,items/type,items/richText/text');await ctx.sync();
+    if(ps.items.length!==anchor.count||ps.items.some((x,i)=>i!==anchor.index&&x.id!==anchor.ids[i]))throw Error('空段落清理后结构核对失败。');
+    p=ps.items[anchor.index];
+   }
    textLoaded=true;location=anchor;
   }else{
    if(p.isNullObject){
